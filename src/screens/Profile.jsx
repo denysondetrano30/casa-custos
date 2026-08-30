@@ -251,10 +251,36 @@ export default function Profile({
       <ListaValores titulo="Contas pessoais fixas" itens={fixas} vazio="Nenhuma conta pessoal fixa." />
       <ListaValores titulo="Gastos pessoais variáveis" itens={variaveis} vazio="Nenhum gasto pessoal variável." />
 
-      <div style={{ marginTop: 24, fontSize: 12, color: color.textWeak, lineHeight: 1.5 }}>
+      <div style={{ marginTop: 24, fontSize: 12, color: color.textWeak, lineHeight: 1.5, marginBottom: 24 }}>
         Gasto real de {outraPessoa}: {brl(outroGastoReal)}
         <br />
         As contas pessoais não entram no orçamento compartilhado — só aqui.
+      </div>
+
+      <div style={{ borderTop: `1px solid ${color.borderSubtle}`, paddingTop: 16 }}>
+        <div style={{ fontSize: 11, color: color.textWeak, marginBottom: 10 }}>
+          Isso apaga só os dados guardados NESTE aparelho e navegador — não afeta outros celulares ou computadores.
+        </div>
+        <button
+          onClick={() => {
+            if (window.confirm('Apagar todos os dados deste aparelho e recomeçar do zero?')) {
+              localStorage.removeItem('casa:v1');
+              window.location.reload();
+            }
+          }}
+          style={{
+            width: '100%',
+            padding: '11px 0',
+            borderRadius: radius.row,
+            border: `1px solid ${color.alertBar}`,
+            background: 'transparent',
+            color: color.alertText,
+            fontSize: 13,
+            cursor: 'pointer',
+          }}
+        >
+          Apagar dados e recomeçar
+        </button>
       </div>
     </div>
   );
