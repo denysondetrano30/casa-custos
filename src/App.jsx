@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
 import TabBar from './components/TabBar';
 import FloatingAddButton from './components/FloatingAddButton';
 import Home from './screens/Home';
@@ -10,9 +11,10 @@ import Split from './screens/Split';
 import Goals from './screens/Goals';
 import Shop from './screens/Shop';
 import Login from './screens/Login';
+import HouseSetup from './screens/HouseSetup';
 import { color } from './lib/tokens';
-import { auth } from './lib/firebase';
-import { useStoredState } from './hooks/useStoredState';
+import { auth, db } from './lib/firebase';
+import { useHouseData } from './hooks/useHouseData';
 import { initialState } from './lib/initialState';
 import { buildCommitments } from './lib/commitments';
 import { splitBills } from './lib/split';
@@ -31,7 +33,6 @@ export default function App() {
   const [screen, setScreen] = useState('home');
   const [adding, setAdding] = useState(null); // null = fechado, ou { person } quando aberto
   const [profilePerson, setProfilePerson] = useState('Rui');
-  const [state, setState] = useStoredState('casa:v1', initialState);
 
   // Controle de login: enquanto o Firebase ainda não respondeu se tem
   // alguém logado, "carregandoAuth" fica true e mostramos uma tela vazia
@@ -47,13 +48,31 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  const commitments = useMemo(() => buildCommitments(state), [state.bills, state.cats]);
+  // Depois de logado, descobrimos a qual "casa" (documento compartilhado no
+  // Firestore) essa conta pertence. Se ainda não pertence a nenhuma, a tela
+  // HouseSetup cuida de criar uma nova ou entrar com um código de convite.
+  const [houseId, setHouseId] = useState(undefined); // undefined = ainda não sabemos, null = sabemos que não tem
+  useEffect(() => {
+    if (!user) {
+      setHouseId(undefined);
+      return;
+    }
+    const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+      setHouseId(snap.exists() && snap.data().houseId ? snap.data().houseId : null);
+    });
+    return unsubscribe;
+  }, [user]);
+
+  const [state, setState] = useHouseData(houseId, initialState);
+
+  const commitments = useMemo(() => (state ? buildCommitments(state) : []), [state]);
   const totalCommitments = commitments.reduce((s, c) => s + c.value, 0);
 
   // Recalcula quem paga o quê sempre que contas ou renda mudam.
   const splitResult = useMemo(() => {
+    if (!state) return { Rui: [], Ana: [] };
     return splitBills(commitments, state.splitPct.Rui, ['Rui', 'Ana']);
-  }, [commitments, state.splitPct]);
+  }, [commitments, state]);
 
   function gastoRealDe(pessoa) {
     const casa = splitResult[pessoa].reduce((s, i) => s + i.part, 0);
@@ -266,6 +285,20 @@ export default function App() {
     }));
   }
 
+  if (carregandoAuth) {
+    return <div style={{ minHeight: '100vh', background: color.bg }} />;
+  }
+  if (!user) {
+    return <Login />;
+  }
+  if (houseId === undefined || (houseId && !state)) {
+    // Ainda buscando a casa, ou já sabemos a casa mas os dados ainda não chegaram do Firestore.
+    return <div style={{ minHeight: '100vh', background: color.bg }} />;
+  }
+  if (houseId === null) {
+    return <HouseSetup onHouseReady={setHouseId} />;
+  }
+
   const outraPessoa = { Rui: 'Ana', Ana: 'Rui' };
   const extrasTotal = (pessoa) => state.extras[pessoa].reduce((s, e) => s + e.v, 0);
   const rendaCasalTotal =
@@ -329,18 +362,11 @@ export default function App() {
         onUpdateIncome={updateIncome}
         onRemoveExtra={removeExtra}
         onRegistrarExtra={(pessoa) => setAdding({ person: pessoa })}
+        houseId={houseId}
       />
     ),
   };
   const Screen = SCREENS[screen];
-
-  if (carregandoAuth) {
-    return <div style={{ minHeight: '100vh', background: color.bg }} />;
-  }
-
-  if (!user) {
-    return <Login />;
-  }
 
   return (
     <div style={{ minHeight: '100vh', background: color.bg }}>

@@ -115,6 +115,7 @@ export default function Profile({
   onUpdateIncome,
   onRemoveExtra,
   onRegistrarExtra,
+  houseId,
 }) {
   const rendaFixa = income[person] || 0;
   const rendaExtras = extras[person] || [];
@@ -140,6 +141,25 @@ export default function Profile({
   return (
     <div style={{ padding: '64px 20px 168px' }}>
       <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: '-.02em', marginBottom: 20 }}>Perfil</div>
+
+      {houseId && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: color.surfaceInset,
+            borderRadius: radius.row,
+            padding: '10px 14px',
+            marginBottom: 20,
+          }}
+        >
+          <div style={{ fontSize: 11.5, color: color.textWeak }}>
+            Código da casa (compartilhe para a outra pessoa entrar)
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '.08em' }}>{houseId}</div>
+        </div>
+      )}
 
       <Segmented value={person} onChange={onChangePerson} options={['Rui', 'Ana']} />
 
