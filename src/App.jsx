@@ -235,6 +235,13 @@ export default function App() {
     });
   }
 
+  function editCategoryBudget(id, budget) {
+    setState((prev) => ({
+      ...prev,
+      cats: prev.cats.map((c) => (c.id === id ? { ...c, budget } : c)),
+    }));
+  }
+
   function addGoal(goal) {
     setState((prev) => ({
       ...prev,
@@ -246,7 +253,9 @@ export default function App() {
   const rendaCasal = state.income.Rui + state.income.Ana;
 
   const SCREENS = {
-    home: () => <Home month={state.month} cats={state.cats} txs={state.txs} />,
+    home: () => (
+      <Home month={state.month} cats={state.cats} txs={state.txs} onEditCategoryBudget={editCategoryBudget} />
+    ),
     shop: () => (
       <Shop
         shop={state.shop}

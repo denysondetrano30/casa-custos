@@ -9,7 +9,6 @@ export const initialState = {
     label: 'Agosto 2026',
     today: 30,
     daysInMonth: 31,
-    budget: 8000,
     status: 'no ritmo',
   },
 

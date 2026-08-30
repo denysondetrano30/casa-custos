@@ -1,4 +1,4 @@
-import { CaretLeft, CaretRight, DownloadSimple } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, DownloadSimple, PencilSimple } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 
@@ -18,9 +18,9 @@ function SectionLabel({ children }) {
   );
 }
 
-function HeroCard({ month, spent }) {
-  const restante = month.budget - spent;
-  const pctGasto = Math.min(100, (spent / month.budget) * 100);
+function HeroCard({ month, spent, budgetTotal }) {
+  const restante = budgetTotal - spent;
+  const pctGasto = budgetTotal > 0 ? Math.min(100, (spent / budgetTotal) * 100) : 0;
   const pctHoje = (month.today / month.daysInMonth) * 100;
   const porDia = Math.max(0, restante) / Math.max(1, month.daysInMonth - month.today);
 
@@ -96,22 +96,26 @@ function HeroCard({ month, spent }) {
       </div>
 
       <div style={{ fontSize: 12.5, color: color.textMedium, marginTop: 6 }}>
-        Gasto {brl(spent)} de {brl(month.budget)}
+        Gasto {brl(spent)} de {brl(budgetTotal)}
       </div>
       <div style={{ fontSize: 12.5, color: color.textMedium }}>
         Pode gastar por dia {brl(porDia)}
+      </div>
+      <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 8 }}>
+        O orçamento de R$ {budgetTotal.toLocaleString('pt-BR')} é a soma do orçamento de cada categoria abaixo — toque
+        no lápis de uma categoria pra mudar.
       </div>
     </div>
   );
 }
 
-function CategoriesSection({ cats }) {
+function CategoriesSection({ cats, onEditBudget }) {
   return (
     <div style={{ marginBottom: 20 }}>
       <SectionLabel>Onde foi</SectionLabel>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {cats.map((cat) => {
-          const pct = Math.min(100, (cat.spent / cat.budget) * 100);
+          const pct = cat.budget > 0 ? Math.min(100, (cat.spent / cat.budget) * 100) : 0;
           const estourou = cat.spent > cat.budget;
           return (
             <div
@@ -124,10 +128,25 @@ function CategoriesSection({ cats }) {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                 <span style={{ fontSize: 14 }}>{cat.name}</span>
-                <span style={{ fontSize: 13.5, minWidth: 86, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {brl(cat.spent)}{' '}
-                  <span style={{ color: color.textWeak, fontSize: 11.5 }}>de {brl(cat.budget, false)}</span>
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13.5, minWidth: 86, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {brl(cat.spent)}{' '}
+                    <span style={{ color: color.textWeak, fontSize: 11.5 }}>de {brl(cat.budget, false)}</span>
+                  </span>
+                  <button
+                    onClick={() => onEditBudget(cat)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      padding: 2,
+                    }}
+                    aria-label={`Editar orçamento de ${cat.name}`}
+                  >
+                    <PencilSimple size={13} color={color.textWeak} />
+                  </button>
+                </div>
               </div>
               <div style={{ height: 4, borderRadius: 99, background: color.borderSubtle, overflow: 'hidden' }}>
                 <div
@@ -217,8 +236,20 @@ function RecentTransactions({ txs }) {
   );
 }
 
-export default function Home({ month, cats, txs }) {
+export default function Home({ month, cats, txs, onEditCategoryBudget }) {
   const spent = cats.reduce((sum, c) => sum + c.spent, 0);
+  const budgetTotal = cats.reduce((sum, c) => sum + c.budget, 0);
+
+  function handleEditBudget(cat) {
+    const resposta = window.prompt(`Novo orçamento mensal para "${cat.name}" (só números, ex. 1500):`, cat.budget);
+    if (resposta === null) return;
+    const valor = Number(resposta.replace(',', '.'));
+    if (Number.isNaN(valor) || valor < 0) {
+      window.alert('Isso não parece um número válido. Tente de novo.');
+      return;
+    }
+    onEditCategoryBudget(cat.id, valor);
+  }
 
   return (
     <div
@@ -239,8 +270,8 @@ export default function Home({ month, cats, txs }) {
         </div>
       </div>
 
-      <HeroCard month={month} spent={spent} />
-      <CategoriesSection cats={cats} />
+      <HeroCard month={month} spent={spent} budgetTotal={budgetTotal} />
+      <CategoriesSection cats={cats} onEditBudget={handleEditBudget} />
       <ImportCard />
       <RecentTransactions txs={txs} />
     </div>
