@@ -250,11 +250,22 @@ export default function App() {
   }
 
   const outraPessoa = { Rui: 'Ana', Ana: 'Rui' };
-  const rendaCasal = state.income.Rui + state.income.Ana;
+  const extrasTotal = (pessoa) => state.extras[pessoa].reduce((s, e) => s + e.v, 0);
+  const rendaCasalTotal =
+    state.income.Rui + state.income.Ana + extrasTotal('Rui') + extrasTotal('Ana');
+  const billsTotal = state.bills.reduce((s, b) => s + b.value, 0);
+  const rendaCasal = state.income.Rui + state.income.Ana; // só renda fixa, usada nas faturas futuras
 
   const SCREENS = {
     home: () => (
-      <Home month={state.month} cats={state.cats} txs={state.txs} onEditCategoryBudget={editCategoryBudget} />
+      <Home
+        month={state.month}
+        cats={state.cats}
+        txs={state.txs}
+        onEditCategoryBudget={editCategoryBudget}
+        rendaCasal={rendaCasalTotal}
+        billsTotal={billsTotal}
+      />
     ),
     shop: () => (
       <Shop

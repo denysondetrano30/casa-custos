@@ -18,9 +18,9 @@ function SectionLabel({ children }) {
   );
 }
 
-function HeroCard({ month, spent, budgetTotal }) {
-  const restante = budgetTotal - spent;
-  const pctGasto = budgetTotal > 0 ? Math.min(100, (spent / budgetTotal) * 100) : 0;
+function HeroCard({ month, gastoTotal, rendaCasal }) {
+  const restante = rendaCasal - gastoTotal;
+  const pctGasto = rendaCasal > 0 ? Math.min(100, (gastoTotal / rendaCasal) * 100) : 0;
   const pctHoje = (month.today / month.daysInMonth) * 100;
   const porDia = Math.max(0, restante) / Math.max(1, month.daysInMonth - month.today);
 
@@ -96,14 +96,14 @@ function HeroCard({ month, spent, budgetTotal }) {
       </div>
 
       <div style={{ fontSize: 12.5, color: color.textMedium, marginTop: 6 }}>
-        Gasto {brl(spent)} de {brl(budgetTotal)}
+        Gasto {brl(gastoTotal)} de {brl(rendaCasal)} de renda
       </div>
       <div style={{ fontSize: 12.5, color: color.textMedium }}>
         Pode gastar por dia {brl(porDia)}
       </div>
       <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 8 }}>
-        O orçamento de R$ {budgetTotal.toLocaleString('pt-BR')} é a soma do orçamento de cada categoria abaixo — toque
-        no lápis de uma categoria pra mudar.
+        Renda do casal (fixa + extras) menos contas fixas menos gasto nas categorias abaixo. Renda e contas se editam
+        no Perfil e nas Contas.
       </div>
     </div>
   );
@@ -236,9 +236,9 @@ function RecentTransactions({ txs }) {
   );
 }
 
-export default function Home({ month, cats, txs, onEditCategoryBudget }) {
+export default function Home({ month, cats, txs, onEditCategoryBudget, rendaCasal, billsTotal }) {
   const spent = cats.reduce((sum, c) => sum + c.spent, 0);
-  const budgetTotal = cats.reduce((sum, c) => sum + c.budget, 0);
+  const gastoTotal = spent + billsTotal;
 
   function handleEditBudget(cat) {
     const resposta = window.prompt(`Novo orçamento mensal para "${cat.name}" (só números, ex. 1500):`, cat.budget);
@@ -270,7 +270,7 @@ export default function Home({ month, cats, txs, onEditCategoryBudget }) {
         </div>
       </div>
 
-      <HeroCard month={month} spent={spent} budgetTotal={budgetTotal} />
+      <HeroCard month={month} gastoTotal={gastoTotal} rendaCasal={rendaCasal} />
       <CategoriesSection cats={cats} onEditBudget={handleEditBudget} />
       <ImportCard />
       <RecentTransactions txs={txs} />
