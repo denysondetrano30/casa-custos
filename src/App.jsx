@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import TabBar from './components/TabBar';
 import FloatingAddButton from './components/FloatingAddButton';
 import Home from './screens/Home';
@@ -8,7 +9,9 @@ import Bills from './screens/Bills';
 import Split from './screens/Split';
 import Goals from './screens/Goals';
 import Shop from './screens/Shop';
+import Login from './screens/Login';
 import { color } from './lib/tokens';
+import { auth } from './lib/firebase';
 import { useStoredState } from './hooks/useStoredState';
 import { initialState } from './lib/initialState';
 import { buildCommitments } from './lib/commitments';
@@ -29,6 +32,20 @@ export default function App() {
   const [adding, setAdding] = useState(null); // null = fechado, ou { person } quando aberto
   const [profilePerson, setProfilePerson] = useState('Rui');
   const [state, setState] = useStoredState('casa:v1', initialState);
+
+  // Controle de login: enquanto o Firebase ainda não respondeu se tem
+  // alguém logado, "carregandoAuth" fica true e mostramos uma tela vazia
+  // rapidinha, para não piscar a tela de login à toa.
+  const [user, setUser] = useState(null);
+  const [carregandoAuth, setCarregandoAuth] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setCarregandoAuth(false);
+    });
+    return unsubscribe;
+  }, []);
 
   const commitments = useMemo(() => buildCommitments(state), [state.bills, state.cats]);
   const totalCommitments = commitments.reduce((s, c) => s + c.value, 0);
@@ -316,6 +333,14 @@ export default function App() {
     ),
   };
   const Screen = SCREENS[screen];
+
+  if (carregandoAuth) {
+    return <div style={{ minHeight: '100vh', background: color.bg }} />;
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: color.bg }}>

@@ -1,4 +1,6 @@
 import { X, Plus } from '@phosphor-icons/react';
+import { signOut } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 
@@ -280,6 +282,23 @@ export default function Profile({
           }}
         >
           Apagar dados e recomeçar
+        </button>
+
+        <button
+          onClick={() => signOut(auth)}
+          style={{
+            width: '100%',
+            marginTop: 10,
+            padding: '11px 0',
+            borderRadius: radius.row,
+            border: `1px solid ${color.border}`,
+            background: 'transparent',
+            color: color.textMedium,
+            fontSize: 13,
+            cursor: 'pointer',
+          }}
+        >
+          Sair da conta
         </button>
       </div>
     </div>
