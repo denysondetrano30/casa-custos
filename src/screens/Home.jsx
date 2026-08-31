@@ -109,14 +109,21 @@ function HeroCard({ month, gastoTotal, rendaCasal }) {
   );
 }
 
-function CategoriesSection({ cats, onEditBudget }) {
+function CategoriesSection({ cats, bills = [], sharedPurchases = [], onEditBudget }) {
   return (
     <div style={{ marginBottom: 20 }}>
       <SectionLabel>Onde foi</SectionLabel>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {cats.map((cat) => {
-          const pct = cat.budget > 0 ? Math.min(100, (cat.spent / cat.budget) * 100) : 0;
-          const estourou = cat.spent > cat.budget;
+          const contasFixasCat = bills
+            .filter((b) => b.category === cat.id)
+            .reduce((sum, b) => sum + (b.value || 0), 0);
+          const comprasConjuntasCat = sharedPurchases
+            .filter((p) => p.category === cat.id)
+            .reduce((sum, p) => sum + (p.value || 0), 0);
+          const totalCat = cat.spent + contasFixasCat + comprasConjuntasCat;
+          const pct = cat.budget > 0 ? Math.min(100, (totalCat / cat.budget) * 100) : 0;
+          const estourou = totalCat > cat.budget;
           return (
             <div
               key={cat.id}
@@ -130,7 +137,7 @@ function CategoriesSection({ cats, onEditBudget }) {
                 <span style={{ fontSize: 14 }}>{cat.name}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 13.5, minWidth: 86, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {brl(cat.spent)}{' '}
+                    {brl(totalCat)}{' '}
                     <span style={{ color: color.textWeak, fontSize: 11.5 }}>de {brl(cat.budget, false)}</span>
                   </span>
                   <button
@@ -157,6 +164,16 @@ function CategoriesSection({ cats, onEditBudget }) {
                   }}
                 />
               </div>
+              {(contasFixasCat > 0 || comprasConjuntasCat > 0) && (
+                <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6 }}>
+                  {[
+                    contasFixasCat > 0 ? `${brl(contasFixasCat)} de contas fixas` : null,
+                    comprasConjuntasCat > 0 ? `${brl(comprasConjuntasCat)} de compras no cartão` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' + ')}
+                </div>
+              )}
             </div>
           );
         })}
@@ -165,9 +182,10 @@ function CategoriesSection({ cats, onEditBudget }) {
   );
 }
 
-function ImportCard() {
+function ImportCard({ onClick }) {
   return (
     <button
+      onClick={onClick}
       style={{
         width: '100%',
         display: 'flex',
@@ -236,7 +254,7 @@ function RecentTransactions({ txs }) {
   );
 }
 
-export default function Home({ month, cats, txs, onEditCategoryBudget, rendaCasal, billsTotal }) {
+export default function Home({ month, cats, txs, onEditCategoryBudget, rendaCasal, billsTotal, bills = [], sharedPurchases = [], onImport }) {
   const spent = cats.reduce((sum, c) => sum + c.spent, 0);
   const gastoTotal = spent + billsTotal;
 
@@ -271,8 +289,8 @@ export default function Home({ month, cats, txs, onEditCategoryBudget, rendaCasa
       </div>
 
       <HeroCard month={month} gastoTotal={gastoTotal} rendaCasal={rendaCasal} />
-      <CategoriesSection cats={cats} onEditBudget={handleEditBudget} />
-      <ImportCard />
+      <CategoriesSection cats={cats} bills={bills} sharedPurchases={sharedPurchases} onEditBudget={handleEditBudget} />
+      <ImportCard onClick={onImport} />
       <RecentTransactions txs={txs} />
     </div>
   );

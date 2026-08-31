@@ -12,6 +12,7 @@ import Goals from './screens/Goals';
 import Shop from './screens/Shop';
 import Login from './screens/Login';
 import HouseSetup from './screens/HouseSetup';
+import ImportExtrato from './screens/ImportExtrato';
 import { color } from './lib/tokens';
 import { auth, db } from './lib/firebase';
 import { useHouseData } from './hooks/useHouseData';
@@ -32,6 +33,7 @@ function EmComConstrucao({ nome }) {
 export default function App() {
   const [screen, setScreen] = useState('home');
   const [adding, setAdding] = useState(null); // null = fechado, ou { person } quando aberto
+  const [importing, setImporting] = useState(false);
   const [profilePerson, setProfilePerson] = useState('Rui');
 
   // Controle de login: enquanto o Firebase ainda não respondeu se tem
@@ -83,7 +85,7 @@ export default function App() {
   }
 
   function handleSaveEntry(payload) {
-    const { addType, value, cat, payer, desc, addPerson, pcat, addRecurring, addName, addDue, rendaKind } = payload;
+    const { addType, value, cat, payer, desc, addPerson, pcat, addRecurring, addName, addDue, contaCat, rendaKind } = payload;
 
     setState((prev) => {
       if (addType === 'casa') {
@@ -125,7 +127,7 @@ export default function App() {
           ...prev,
           bills: [
             ...prev.bills,
-            { id: Date.now(), name: addName, due: Number(addDue), value, paid: false },
+            { id: Date.now(), name: addName, due: Number(addDue), value, paid: false, category: contaCat || null },
           ],
         };
       }
@@ -330,6 +332,76 @@ export default function App() {
     setState((prev) => ({ ...prev, names: { ...prev.names, [pessoa]: nome } }));
   }
 
+  // Recebe a lista já classificada do extrato importado (ImportExtrato.jsx)
+  // e lança cada item no lugar certo:
+  // - gasto marcado como "Casa" é gasto conjunto: vira uma "compra
+  //   conjunta" deste mês (sharedPurchases), que aparece em Contas → Este
+  //   mês, entra na categoria correspondente na tela Início, e entra na
+  //   divisão de quem paga o quê — igual uma conta fixa, mas sem virar
+  //   recorrente.
+  // - se a compra é parcelada, além da parcela deste mês, a gente também
+  //   lança a parcela como "ativa" pra aparecer nos Meses futuros.
+  // - gasto marcado como pessoal de alguém entra nos gastos pessoais
+  //   variáveis dessa pessoa (não é dividido, é só dela).
+  function importTransactions(items) {
+    setState((prev) => {
+      let installments = [...prev.installments];
+      let personal = prev.personal;
+      let sharedPurchases = [...(prev.sharedPurchases || [])];
+
+      for (const it of items) {
+        if (it.classificacao === 'ignorar') continue;
+
+        if (it.classificacao === 'Rui' || it.classificacao === 'Ana') {
+          personal = {
+            ...personal,
+            [it.classificacao]: {
+              ...personal[it.classificacao],
+              variable: [
+                ...personal[it.classificacao].variable,
+                { id: Date.now() + Math.random(), name: it.desc, value: it.value },
+              ],
+            },
+          };
+          continue;
+        }
+
+        // classificacao === 'casa'
+        if (it.parcelaTotal && it.parcelaTotal > 1) {
+          installments = [
+            ...installments,
+            {
+              id: Date.now() + Math.random(),
+              name: it.desc,
+              per: it.value,
+              count: it.parcelaTotal,
+              done: Math.max(0, (it.parcelaAtual || 1) - 1),
+            },
+          ];
+        }
+
+        sharedPurchases = [
+          ...sharedPurchases,
+          {
+            id: Date.now() + Math.random(),
+            name: it.desc + (it.parcelaTotal ? ` · Parcela ${it.parcelaAtual}/${it.parcelaTotal}` : ''),
+            value: it.value,
+            category: it.category || null,
+          },
+        ];
+      }
+
+      return { ...prev, installments, personal, sharedPurchases };
+    });
+  }
+
+  function deleteSharedPurchase(id) {
+    setState((prev) => ({
+      ...prev,
+      sharedPurchases: (prev.sharedPurchases || []).filter((p) => p.id !== id),
+    }));
+  }
+
   function addPersonalCategory(nome) {
     setState((prev) => {
       const atuais = prev.personalCategories || [];
@@ -356,7 +428,8 @@ export default function App() {
   const extrasTotal = (pessoa) => state.extras[pessoa].reduce((s, e) => s + e.v, 0);
   const rendaCasalTotal =
     state.income.Rui + state.income.Ana + extrasTotal('Rui') + extrasTotal('Ana');
-  const billsTotal = state.bills.reduce((s, b) => s + b.value, 0);
+  const sharedPurchasesTotal = (state.sharedPurchases || []).reduce((s, p) => s + p.value, 0);
+  const billsTotal = state.bills.reduce((s, b) => s + b.value, 0) + sharedPurchasesTotal;
   const rendaCasal = state.income.Rui + state.income.Ana; // só renda fixa, usada nas faturas futuras
 
   const SCREENS = {
@@ -364,10 +437,13 @@ export default function App() {
       <Home
         month={state.month}
         cats={state.cats}
+        bills={state.bills}
+        sharedPurchases={state.sharedPurchases}
         txs={state.txs}
         onEditCategoryBudget={editCategoryBudget}
         rendaCasal={rendaCasalTotal}
         billsTotal={billsTotal}
+        onImport={() => setImporting(true)}
       />
     ),
     shop: () => (
@@ -389,6 +465,7 @@ export default function App() {
         onTogglePaid={togglePaid}
         onEditBill={editBill}
         onDeleteBill={deleteBill}
+        onDeleteSharedPurchase={deleteSharedPurchase}
         onLancarInstallment={lancarInstallment}
         rendaCasal={rendaCasal}
         rendaFixaCasal={rendaCasal}
@@ -439,6 +516,17 @@ export default function App() {
           names={names}
           personalCategories={state.personalCategories}
           onAddPersonalCategory={addPersonalCategory}
+          cats={state.cats}
+        />
+      ) : importing ? (
+        <ImportExtrato
+          cats={state.cats}
+          names={names}
+          onClose={() => setImporting(false)}
+          onConfirm={(items) => {
+            importTransactions(items);
+            setImporting(false);
+          }}
         />
       ) : (
         <>

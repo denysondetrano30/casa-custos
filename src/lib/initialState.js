@@ -30,6 +30,12 @@ export const initialState = {
 
   bills: [],
 
+  // Compras feitas no cartão que são gasto conjunto (de casa), vindas da
+  // importação de extrato — diferente de "bills", que são contas fixas que
+  // se repetem todo mês. Isso aqui é pontual: entra na divisão deste mês,
+  // mas não é somado nos meses futuros.
+  sharedPurchases: [],
+
   installments: [],
 
   goals: [],

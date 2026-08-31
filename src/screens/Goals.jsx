@@ -4,6 +4,22 @@ import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 import { monthLabel } from '../lib/futureBills';
 
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+// Quantos meses faltam entre o mês atual do app (ex. "Agosto 2026") e um
+// mês/ano escolhido num <input type="month"> (formato "2027-12").
+function mesesAte(baseMonthLabel, valorInputMonth) {
+  if (!valorInputMonth) return null;
+  const [nomeMes, ano] = baseMonthLabel.split(' ');
+  const idxBase = MESES.findIndex((m) => nomeMes.toLowerCase().startsWith(m));
+  const baseTotal = Number(ano) * 12 + idxBase;
+
+  const [anoAlvo, mesAlvoNum] = valorInputMonth.split('-').map(Number);
+  const alvoTotal = anoAlvo * 12 + (mesAlvoNum - 1);
+
+  return alvoTotal - baseTotal;
+}
+
 function GoalCard({ goal, baseMonthLabel }) {
   const pct = Math.min(100, (goal.saved / goal.target) * 100);
   const falta = Math.max(0, goal.target - goal.saved);
@@ -64,10 +80,16 @@ function GoalCard({ goal, baseMonthLabel }) {
   );
 }
 
-function NovaMetaForm({ onAdd, onClose }) {
+function NovaMetaForm({ onAdd, onClose, baseMonthLabel }) {
   const [name, setName] = useState('');
   const [target, setTarget] = useState('');
-  const [monthly, setMonthly] = useState('');
+  const [dataAlvo, setDataAlvo] = useState('');
+  const [monthlyManual, setMonthlyManual] = useState('');
+
+  const meses = mesesAte(baseMonthLabel, dataAlvo);
+  const mesesValidos = meses !== null && meses > 0;
+  const aporteSugerido = mesesValidos && Number(target) > 0 ? Number(target) / meses : 0;
+  const monthly = monthlyManual !== '' ? Number(monthlyManual) : Math.ceil(aporteSugerido);
 
   const pronto = name.trim() !== '' && Number(target) > 0;
 
@@ -90,12 +112,40 @@ function NovaMetaForm({ onAdd, onClose }) {
       <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 10 }}>Nova meta</div>
       <input style={inputStyle()} placeholder="Nome (ex. Viagem)" value={name} onChange={(e) => setName(e.target.value)} />
       <input style={inputStyle()} placeholder="Valor alvo (ex. 12000)" value={target} onChange={(e) => setTarget(e.target.value)} />
-      <input style={inputStyle()} placeholder="Aporte mensal (ex. 400)" value={monthly} onChange={(e) => setMonthly(e.target.value)} />
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 6 }}>Quer juntar até quando?</div>
+        <input
+          type="month"
+          style={inputStyle()}
+          value={dataAlvo}
+          onChange={(e) => setDataAlvo(e.target.value)}
+        />
+      </div>
+
+      {dataAlvo && !mesesValidos && (
+        <div style={{ fontSize: 12, color: color.alertText, marginBottom: 10 }}>
+          Escolha um mês depois do mês atual ({baseMonthLabel}).
+        </div>
+      )}
+
+      {mesesValidos && Number(target) > 0 && (
+        <div style={{ fontSize: 12, color: color.textMedium, marginBottom: 10, lineHeight: 1.5 }}>
+          Faltam {meses} {meses === 1 ? 'mês' : 'meses'} — aporte sugerido: <strong>{brl(Math.ceil(aporteSugerido))}</strong>/mês
+        </div>
+      )}
+
+      <input
+        style={inputStyle()}
+        placeholder={mesesValidos ? `Aporte mensal (sugestão: ${Math.ceil(aporteSugerido)})` : 'Aporte mensal (ex. 400)'}
+        value={monthlyManual}
+        onChange={(e) => setMonthlyManual(e.target.value)}
+      />
+
       <div style={{ display: 'flex', gap: 8 }}>
         <button
           onClick={() => {
             if (!pronto) return;
-            onAdd({ name, target: Number(target), monthly: Number(monthly) || 0 });
+            onAdd({ name, target: Number(target), monthly: monthly || 0 });
           }}
           disabled={!pronto}
           style={{
@@ -161,6 +211,7 @@ export default function Goals({ goals, baseMonthLabel, onAddGoal }) {
 
       {criando && (
         <NovaMetaForm
+          baseMonthLabel={baseMonthLabel}
           onAdd={(goal) => {
             onAddGoal(goal);
             setCriando(false);

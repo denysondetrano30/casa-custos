@@ -33,9 +33,10 @@ function Segmented({ value, onChange, options }) {
   );
 }
 
-function EstesMes({ bills, onTogglePaid, onEditBill, onDeleteBill, rendaCasal }) {
+function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDeleteBill, onDeleteSharedPurchase, rendaCasal }) {
   const totalContas = bills.reduce((s, b) => s + b.value, 0);
-  const saldo = rendaCasal - totalContas;
+  const totalCompras = sharedPurchases.reduce((s, p) => s + p.value, 0);
+  const saldo = rendaCasal - totalContas - totalCompras;
 
   const porSemana = {};
   bills.forEach((b) => {
@@ -70,7 +71,45 @@ function EstesMes({ bills, onTogglePaid, onEditBill, onDeleteBill, rendaCasal })
         </div>
       </div>
 
-      {bills.length === 0 && (
+      {sharedPurchases.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 8 }}>
+            Compras de cartão em conjunto ({brl(totalCompras)})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {sharedPurchases.map((p) => (
+              <div
+                key={p.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  background: color.surface,
+                  borderRadius: radius.row,
+                  padding: '11px 12px',
+                }}
+              >
+                <span style={{ flex: 1, fontSize: 14, color: color.text }}>{p.name}</span>
+                <span style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{brl(p.value)}</span>
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Apagar "${p.name}" das compras conjuntas?`)) onDeleteSharedPurchase(p.id);
+                  }}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                  aria-label={`Apagar ${p.name}`}
+                >
+                  <Trash size={14} color={color.textWeak} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6 }}>
+            Essas compras vêm do extrato importado, entram na divisão de quem paga o quê e já contam no saldo acima.
+          </div>
+        </div>
+      )}
+
+      {bills.length === 0 && sharedPurchases.length === 0 && (
         <div style={{ fontSize: 13, color: color.textWeak, marginBottom: 16 }}>
           Nenhuma conta fixa cadastrada ainda. Use o botão + (tipo "Conta fixa") para adicionar.
         </div>
@@ -381,7 +420,7 @@ function Simulador({ onLancar }) {
   );
 }
 
-export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, onLancarInstallment, rendaCasal, rendaFixaCasal }) {
+export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, onDeleteSharedPurchase, onLancarInstallment, rendaCasal, rendaFixaCasal }) {
   const [view, setView] = useState('mes');
   const [simulacao, setSimulacao] = useState(null);
 
@@ -401,9 +440,11 @@ export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, o
       {view === 'mes' ? (
         <EstesMes
           bills={state.bills}
+          sharedPurchases={state.sharedPurchases || []}
           onTogglePaid={onTogglePaid}
           onEditBill={onEditBill}
           onDeleteBill={onDeleteBill}
+          onDeleteSharedPurchase={onDeleteSharedPurchase}
           rendaCasal={rendaCasal}
         />
       ) : (

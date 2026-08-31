@@ -10,6 +10,12 @@ export function buildCommitments(state) {
     owner: b.owner,
   }));
 
+  // Compras conjuntas importadas do extrato do cartão também entram na
+  // divisão deste mês, do mesmo jeito que uma conta fixa.
+  (state.sharedPurchases || []).forEach((p) => {
+    commitments.push({ id: `shared-${p.id}`, name: p.name, value: p.value });
+  });
+
   if (mercado) {
     commitments.push({ id: 'mercado', name: 'Mercado', value: mercado.budget });
   }

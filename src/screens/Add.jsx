@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { House, User, Receipt, TrendUp, Backspace, Plus } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
-import { mockCategories } from '../lib/mockData';
 
 const TYPES = [
   { id: 'casa', label: 'Casa', Icon: House },
@@ -72,11 +71,12 @@ export default function Add({
   names = { Rui: 'Rui', Ana: 'Ana' },
   personalCategories = ['Streaming', 'Academia', 'Assinaturas', 'Cabeleireiro', 'Cursos'],
   onAddPersonalCategory,
+  cats = [],
 }) {
   const [addType, setAddType] = useState('casa');
   const [raw, setRaw] = useState('');
 
-  const [cat, setCat] = useState(mockCategories[0].id);
+  const [cat, setCat] = useState(cats[0]?.id || '');
   const [payer, setPayer] = useState('Ana');
   const [desc, setDesc] = useState('');
 
@@ -86,6 +86,7 @@ export default function Add({
 
   const [addName, setAddName] = useState('');
   const [addDue, setAddDue] = useState('');
+  const [contaCat, setContaCat] = useState(cats[0]?.id || '');
 
   const [rendaKind, setRendaKind] = useState('fixa');
 
@@ -99,9 +100,12 @@ export default function Add({
   }
 
   function hint() {
-    if (addType === 'casa') return `${mockCategories.find((c) => c.id === cat)?.name || ''} · pago por ${names[payer]}`;
+    if (addType === 'casa') return `${cats.find((c) => c.id === cat)?.name || ''} · pago por ${names[payer]}`;
     if (addType === 'pessoal') return `${pcat} · ${names[addPerson]} · ${addRecurring ? 'repete todo mês' : 'só neste mês'}`;
-    if (addType === 'conta') return addDue ? `vence dia ${addDue}` : 'defina o dia de vencimento';
+    if (addType === 'conta') {
+      const nomeCat = cats.find((c) => c.id === contaCat)?.name;
+      return `${nomeCat ? nomeCat + ' · ' : ''}${addDue ? `vence dia ${addDue}` : 'defina o dia de vencimento'}`;
+    }
     if (addType === 'renda') return rendaKind === 'fixa' ? `renda fixa de ${names[addPerson]}` : `entrada extra de ${names[addPerson]}`;
     return '';
   }
@@ -114,7 +118,7 @@ export default function Add({
 
   function handleSave() {
     if (!canSave()) return;
-    const payload = { addType, value, cat, payer, desc, addPerson, pcat, addRecurring, addName, addDue, rendaKind };
+    const payload = { addType, value, cat, payer, desc, addPerson, pcat, addRecurring, addName, addDue, contaCat, rendaKind };
     onSave(payload);
   }
 
@@ -175,7 +179,7 @@ export default function Add({
         <>
           <Field label="Categoria">
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {mockCategories.map((c) => (
+              {cats.map((c) => (
                 <Chip key={c.id} active={cat === c.id} onClick={() => setCat(c.id)}>
                   {c.name}
                 </Chip>
@@ -259,6 +263,15 @@ export default function Add({
         <>
           <Field label="Nome da conta">
             <TextInput value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="Ex. Internet" />
+          </Field>
+          <Field label="Categoria">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {cats.map((c) => (
+                <Chip key={c.id} active={contaCat === c.id} onClick={() => setContaCat(c.id)}>
+                  {c.name}
+                </Chip>
+              ))}
+            </div>
           </Field>
           <Field label="Dia de vencimento">
             <TextInput
