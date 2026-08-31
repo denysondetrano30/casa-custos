@@ -72,7 +72,7 @@ function TextInput(props) {
   );
 }
 
-export default function Add({ onClose, onSave, initialPerson }) {
+export default function Add({ onClose, onSave, initialPerson, names = { Rui: 'Rui', Ana: 'Ana' } }) {
   const [addType, setAddType] = useState('casa');
   const [raw, setRaw] = useState('');
 
@@ -99,10 +99,10 @@ export default function Add({ onClose, onSave, initialPerson }) {
   }
 
   function hint() {
-    if (addType === 'casa') return `${mockCategories.find((c) => c.id === cat)?.name || ''} · pago por ${payer}`;
-    if (addType === 'pessoal') return `${pcat} · ${addPerson} · ${addRecurring ? 'repete todo mês' : 'só neste mês'}`;
+    if (addType === 'casa') return `${mockCategories.find((c) => c.id === cat)?.name || ''} · pago por ${names[payer]}`;
+    if (addType === 'pessoal') return `${pcat} · ${names[addPerson]} · ${addRecurring ? 'repete todo mês' : 'só neste mês'}`;
     if (addType === 'conta') return addDue ? `vence dia ${addDue}` : 'defina o dia de vencimento';
-    if (addType === 'renda') return rendaKind === 'fixa' ? `renda fixa de ${addPerson}` : `entrada extra de ${addPerson}`;
+    if (addType === 'renda') return rendaKind === 'fixa' ? `renda fixa de ${names[addPerson]}` : `entrada extra de ${names[addPerson]}`;
     return '';
   }
 
@@ -186,7 +186,7 @@ export default function Add({ onClose, onSave, initialPerson }) {
             <div style={{ display: 'flex', gap: 8 }}>
               {['Ana', 'Rui'].map((p) => (
                 <Chip key={p} active={payer === p} onClick={() => setPayer(p)}>
-                  {p}
+                  {names[p]}
                 </Chip>
               ))}
             </div>
@@ -210,7 +210,7 @@ export default function Add({ onClose, onSave, initialPerson }) {
                     setPcat(PERSONAL_CATEGORIES[p][0]);
                   }}
                 >
-                  {p}
+                  {names[p]}
                 </Chip>
               ))}
             </div>
@@ -260,7 +260,7 @@ export default function Add({ onClose, onSave, initialPerson }) {
             <div style={{ display: 'flex', gap: 8 }}>
               {['Rui', 'Ana'].map((p) => (
                 <Chip key={p} active={addPerson === p} onClick={() => setAddPerson(p)}>
-                  {p}
+                  {names[p]}
                 </Chip>
               ))}
             </div>

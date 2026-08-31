@@ -3,12 +3,14 @@ import { Plus, Minus, X } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 
-const METODOS = [
-  { id: 'credito-rui', label: 'Crédito · Cartão Rui', payer: 'Rui', credito: true },
-  { id: 'credito-ana', label: 'Crédito · Cartão Ana', payer: 'Ana', credito: true },
-  { id: 'debito', label: 'Débito', payer: null, credito: false },
-  { id: 'pix', label: 'Pix', payer: null, credito: false },
-];
+function getMetodos(names) {
+  return [
+    { id: 'credito-rui', label: `Crédito · Cartão ${names.Rui}`, payer: 'Rui', credito: true },
+    { id: 'credito-ana', label: `Crédito · Cartão ${names.Ana}`, payer: 'Ana', credito: true },
+    { id: 'debito', label: 'Débito', payer: null, credito: false },
+    { id: 'pix', label: 'Pix', payer: null, credito: false },
+  ];
+}
 
 function SectionLabel({ children }) {
   return (
@@ -182,7 +184,8 @@ function ListaItens({ items, onChangeQty }) {
   );
 }
 
-function ComoVaiPagar({ method, onChangeMethod, debitPart, onChangeDebitPart, total }) {
+function ComoVaiPagar({ method, onChangeMethod, debitPart, onChangeDebitPart, total, names }) {
+  const METODOS = getMetodos(names);
   const metodoAtual = METODOS.find((m) => m.id === method);
   const debito = Math.min(debitPart, total);
   const credito = total - debito;
@@ -246,7 +249,17 @@ function ComoVaiPagar({ method, onChangeMethod, debitPart, onChangeDebitPart, to
   );
 }
 
-export default function Shop({ shop, mercado, onAddItem, onChangeQty, onChangeMethod, onChangeDebitPart, onFinalizar, purchases }) {
+export default function Shop({
+  shop,
+  mercado,
+  onAddItem,
+  onChangeQty,
+  onChangeMethod,
+  onChangeDebitPart,
+  onFinalizar,
+  purchases,
+  names = { Rui: 'Rui', Ana: 'Ana' },
+}) {
   const total = shop.items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
   const podeFinalizar = shop.items.length > 0 && total > 0;
 
@@ -268,6 +281,7 @@ export default function Shop({ shop, mercado, onAddItem, onChangeQty, onChangeMe
         debitPart={shop.debitPart}
         onChangeDebitPart={onChangeDebitPart}
         total={total}
+        names={names}
       />
 
       <button

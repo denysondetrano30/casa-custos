@@ -5,6 +5,12 @@
 // se quiser valores diferentes, me diga e eu ajusto aqui.
 
 export const initialState = {
+  // Nomes de exibição das duas pessoas da casa. "Rui" e "Ana" continuam
+  // existindo como identificadores internos (é o que o resto do código usa
+  // para separar renda, contas, etc. de cada um) — o que aparece na tela é
+  // sempre isto aqui, editável no Perfil.
+  names: { Rui: 'Pessoa 1', Ana: 'Pessoa 2' },
+
   month: {
     label: 'Agosto 2026',
     today: 30,

@@ -64,6 +64,7 @@ export default function App() {
   }, [user]);
 
   const [state, setState] = useHouseData(houseId, initialState);
+  const names = state?.names || { Rui: 'Rui', Ana: 'Ana' };
 
   const commitments = useMemo(() => (state ? buildCommitments(state) : []), [state]);
   const totalCommitments = commitments.reduce((s, c) => s + c.value, 0);
@@ -203,8 +204,8 @@ export default function App() {
   }
 
   const METODO_LABEL = {
-    'credito-rui': 'Crédito · Cartão Rui',
-    'credito-ana': 'Crédito · Cartão Ana',
+    'credito-rui': `Crédito · Cartão ${names.Rui}`,
+    'credito-ana': `Crédito · Cartão ${names.Ana}`,
     debito: 'Débito',
     pix: 'Pix',
   };
@@ -285,6 +286,10 @@ export default function App() {
     }));
   }
 
+  function updateName(pessoa, nome) {
+    setState((prev) => ({ ...prev, names: { ...prev.names, [pessoa]: nome } }));
+  }
+
   if (carregandoAuth) {
     return <div style={{ minHeight: '100vh', background: color.bg }} />;
   }
@@ -327,6 +332,7 @@ export default function App() {
         onChangeDebitPart={shopChangeDebitPart}
         onFinalizar={shopFinalizar}
         purchases={state.purchases}
+        names={names}
       />
     ),
     bills: () => (
@@ -346,6 +352,7 @@ export default function App() {
         onChangePctRui={updateSplitPct}
         splitResult={splitResult}
         totalCommitments={totalCommitments}
+        names={names}
       />
     ),
     goals: () => <Goals goals={state.goals} baseMonthLabel={state.month.label} onAddGoal={addGoal} />,
@@ -363,6 +370,8 @@ export default function App() {
         onRemoveExtra={removeExtra}
         onRegistrarExtra={(pessoa) => setAdding({ person: pessoa })}
         houseId={houseId}
+        names={names}
+        onUpdateName={updateName}
       />
     ),
   };
@@ -371,7 +380,7 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh', background: color.bg }}>
       {adding ? (
-        <Add onClose={() => setAdding(null)} onSave={handleSaveEntry} initialPerson={adding.person} />
+        <Add onClose={() => setAdding(null)} onSave={handleSaveEntry} initialPerson={adding.person} names={names} />
       ) : (
         <>
           <Screen />

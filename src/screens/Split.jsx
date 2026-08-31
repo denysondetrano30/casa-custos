@@ -37,7 +37,7 @@ function StepperButton({ children, onClick }) {
   );
 }
 
-function RendaCasal({ income, onUpdateIncome }) {
+function RendaCasal({ income, onUpdateIncome, names }) {
   const total = income.Rui + income.Ana;
   return (
     <div style={{ marginBottom: 22 }}>
@@ -58,7 +58,7 @@ function RendaCasal({ income, onUpdateIncome }) {
               }}
             >
               <div>
-                <div style={{ fontSize: 14 }}>{p}</div>
+                <div style={{ fontSize: 14 }}>{names[p]}</div>
                 <div style={{ fontSize: 11, color: color.textWeak }}>{pct.toFixed(0)}% da renda</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -80,7 +80,7 @@ const PRESETS = [
   { label: '50/50', rui: 50 },
 ];
 
-function ProporcaoCard({ pctRui, onChangePctRui, income, total }) {
+function ProporcaoCard({ pctRui, onChangePctRui, income, total, names }) {
   const pctAna = 100 - pctRui;
   const alvoRui = (total * pctRui) / 100;
   const alvoAna = (total * pctAna) / 100;
@@ -110,8 +110,8 @@ function ProporcaoCard({ pctRui, onChangePctRui, income, total }) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: color.textMedium, marginBottom: 14 }}>
-        <span>Rui: {brl(alvoRui)}</span>
-        <span>Ana: {brl(alvoAna)}</span>
+        <span>{names.Rui}: {brl(alvoRui)}</span>
+        <span>{names.Ana}: {brl(alvoAna)}</span>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -151,7 +151,7 @@ function ProporcaoCard({ pctRui, onChangePctRui, income, total }) {
   );
 }
 
-function Coluna({ pessoa, itens, income, avatarColor }) {
+function Coluna({ pessoa, nome, itens, income, avatarColor, names }) {
   const soma = itens.reduce((s, i) => s + i.part, 0);
   const sobra = income[pessoa] - soma;
 
@@ -159,7 +159,7 @@ function Coluna({ pessoa, itens, income, avatarColor }) {
     <div style={{ flex: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <div style={{ width: 22, height: 22, borderRadius: 99, background: avatarColor }} />
-        <span style={{ fontSize: 13.5, fontWeight: 500 }}>{pessoa}</span>
+        <span style={{ fontSize: 13.5, fontWeight: 500 }}>{nome}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 10 }}>
         {itens.length === 0 && (
@@ -195,7 +195,7 @@ function Coluna({ pessoa, itens, income, avatarColor }) {
             )}
             {item.owner && !item.shared && (
               <div style={{ fontSize: 10, color: color.textWeak, marginTop: 4 }}>
-                conta pessoal — fixa com {item.owner}
+                conta pessoal — fixa com {names[item.owner] || item.owner}
               </div>
             )}
           </div>
@@ -208,18 +208,26 @@ function Coluna({ pessoa, itens, income, avatarColor }) {
   );
 }
 
-export default function Split({ income, onUpdateIncome, pctRui, onChangePctRui, splitResult, totalCommitments }) {
+export default function Split({
+  income,
+  onUpdateIncome,
+  pctRui,
+  onChangePctRui,
+  splitResult,
+  totalCommitments,
+  names = { Rui: 'Rui', Ana: 'Ana' },
+}) {
   return (
     <div style={{ padding: '64px 20px 168px' }}>
       <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: '-.02em', marginBottom: 20 }}>Divisão</div>
 
-      <RendaCasal income={income} onUpdateIncome={onUpdateIncome} />
-      <ProporcaoCard pctRui={pctRui} onChangePctRui={onChangePctRui} income={income} total={totalCommitments} />
+      <RendaCasal income={income} onUpdateIncome={onUpdateIncome} names={names} />
+      <ProporcaoCard pctRui={pctRui} onChangePctRui={onChangePctRui} income={income} total={totalCommitments} names={names} />
 
       <SectionLabel>Quem paga o quê — sugestão</SectionLabel>
       <div style={{ display: 'flex', gap: 14 }}>
-        <Coluna pessoa="Rui" itens={splitResult.Rui} income={income} avatarColor={color.chart[0]} />
-        <Coluna pessoa="Ana" itens={splitResult.Ana} income={income} avatarColor={color.chart[1]} />
+        <Coluna pessoa="Rui" nome={names.Rui} itens={splitResult.Rui} income={income} avatarColor={color.chart[0]} names={names} />
+        <Coluna pessoa="Ana" nome={names.Ana} itens={splitResult.Ana} income={income} avatarColor={color.chart[1]} names={names} />
       </div>
     </div>
   );

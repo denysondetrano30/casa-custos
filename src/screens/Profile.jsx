@@ -1,10 +1,10 @@
-import { X, Plus } from '@phosphor-icons/react';
+import { X, Plus, PencilSimple } from '@phosphor-icons/react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 
-function Segmented({ value, onChange, options }) {
+function Segmented({ value, onChange, options, labels }) {
   return (
     <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
       {options.map((opt) => {
@@ -25,7 +25,7 @@ function Segmented({ value, onChange, options }) {
               cursor: 'pointer',
             }}
           >
-            {opt}
+            {labels ? labels[opt] : opt}
           </button>
         );
       })}
@@ -116,6 +116,8 @@ export default function Profile({
   onRemoveExtra,
   onRegistrarExtra,
   houseId,
+  names = { Rui: 'Rui', Ana: 'Ana' },
+  onUpdateName,
 }) {
   const rendaFixa = income[person] || 0;
   const rendaExtras = extras[person] || [];
@@ -161,7 +163,37 @@ export default function Profile({
         </div>
       )}
 
-      <Segmented value={person} onChange={onChangePerson} options={['Rui', 'Ana']} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <div style={{ flex: 1 }}>
+          <Segmented value={person} onChange={onChangePerson} options={['Rui', 'Ana']} labels={names} />
+        </div>
+      </div>
+
+      {onUpdateName && (
+        <button
+          onClick={() => {
+            const resposta = window.prompt(`Como quer ser chamado(a) no app? (hoje: "${names[person]}")`, names[person]);
+            if (resposta === null) return;
+            const nome = resposta.trim();
+            if (!nome) return;
+            onUpdateName(person, nome);
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: 'transparent',
+            border: 'none',
+            color: color.textWeak,
+            fontSize: 12,
+            cursor: 'pointer',
+            marginBottom: 20,
+            padding: 0,
+          }}
+        >
+          <PencilSimple size={12} /> Mudar meu nome de exibição
+        </button>
+      )}
 
       <div style={{ marginBottom: 22 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
@@ -274,7 +306,7 @@ export default function Profile({
       <ListaValores titulo="Gastos pessoais variáveis" itens={variaveis} vazio="Nenhum gasto pessoal variável." />
 
       <div style={{ marginTop: 24, fontSize: 12, color: color.textWeak, lineHeight: 1.5, marginBottom: 24 }}>
-        Gasto real de {outraPessoa}: {brl(outroGastoReal)}
+        Gasto real de {names[outraPessoa] || outraPessoa}: {brl(outroGastoReal)}
         <br />
         As contas pessoais não entram no orçamento compartilhado — só aqui.
       </div>
