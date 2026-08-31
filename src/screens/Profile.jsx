@@ -1,4 +1,4 @@
-import { X, Plus, PencilSimple } from '@phosphor-icons/react';
+import { X, Plus, PencilSimple, Trash } from '@phosphor-icons/react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { color, radius } from '../lib/tokens';
@@ -69,7 +69,7 @@ function StepperButton({ children, onClick }) {
   );
 }
 
-function ListaValores({ titulo, itens, vazio }) {
+function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem }) {
   const total = itens.reduce((s, i) => s + (i.part ?? i.value), 0);
   return (
     <div style={{ marginBottom: 18 }}>
@@ -86,6 +86,7 @@ function ListaValores({ titulo, itens, vazio }) {
               key={item.id ?? idx}
               style={{
                 display: 'flex',
+                alignItems: 'center',
                 justifyContent: 'space-between',
                 background: color.surface,
                 borderRadius: radius.row,
@@ -94,7 +95,29 @@ function ListaValores({ titulo, itens, vazio }) {
               }}
             >
               <span>{item.name}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{brl(item.part ?? item.value)}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{brl(item.part ?? item.value)}</span>
+                {onEditItem && (
+                  <button
+                    onClick={() => onEditItem(item)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                    aria-label={`Editar ${item.name}`}
+                  >
+                    <PencilSimple size={13} color={color.textWeak} />
+                  </button>
+                )}
+                {onDeleteItem && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Apagar "${item.name}"?`)) onDeleteItem(item.id);
+                    }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                    aria-label={`Apagar ${item.name}`}
+                  >
+                    <Trash size={13} color={color.textWeak} />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -118,6 +141,8 @@ export default function Profile({
   houseId,
   names = { Rui: 'Rui', Ana: 'Ana' },
   onUpdateName,
+  onEditPersonalItem,
+  onDeletePersonalItem,
 }) {
   const rendaFixa = income[person] || 0;
   const rendaExtras = extras[person] || [];
@@ -302,8 +327,42 @@ export default function Profile({
       </div>
 
       <ListaValores titulo="Parte das contas de casa" itens={partesCasa} vazio="Nenhuma conta ainda." />
-      <ListaValores titulo="Contas pessoais fixas" itens={fixas} vazio="Nenhuma conta pessoal fixa." />
-      <ListaValores titulo="Gastos pessoais variáveis" itens={variaveis} vazio="Nenhum gasto pessoal variável." />
+      <ListaValores
+        titulo="Contas pessoais fixas"
+        itens={fixas}
+        vazio="Nenhuma conta pessoal fixa."
+        onEditItem={(item) => {
+          const novoNome = window.prompt('Nome:', item.name);
+          if (novoNome === null) return;
+          const novoValorStr = window.prompt('Valor (só números):', item.value);
+          if (novoValorStr === null) return;
+          const novoValor = Number(String(novoValorStr).replace(',', '.'));
+          if (!novoNome.trim() || Number.isNaN(novoValor) || novoValor < 0) {
+            window.alert('Alguma dessas respostas não é válida. Tente de novo.');
+            return;
+          }
+          onEditPersonalItem(person, 'fixed', item.id, { name: novoNome.trim(), value: novoValor });
+        }}
+        onDeleteItem={(id) => onDeletePersonalItem(person, 'fixed', id)}
+      />
+      <ListaValores
+        titulo="Gastos pessoais variáveis"
+        itens={variaveis}
+        vazio="Nenhum gasto pessoal variável."
+        onEditItem={(item) => {
+          const novoNome = window.prompt('Nome:', item.name);
+          if (novoNome === null) return;
+          const novoValorStr = window.prompt('Valor (só números):', item.value);
+          if (novoValorStr === null) return;
+          const novoValor = Number(String(novoValorStr).replace(',', '.'));
+          if (!novoNome.trim() || Number.isNaN(novoValor) || novoValor < 0) {
+            window.alert('Alguma dessas respostas não é válida. Tente de novo.');
+            return;
+          }
+          onEditPersonalItem(person, 'variable', item.id, { name: novoNome.trim(), value: novoValor });
+        }}
+        onDeleteItem={(id) => onDeletePersonalItem(person, 'variable', id)}
+      />
 
       <div style={{ marginTop: 24, fontSize: 12, color: color.textWeak, lineHeight: 1.5, marginBottom: 24 }}>
         Gasto real de {names[outraPessoa] || outraPessoa}: {brl(outroGastoReal)}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle, Circle } from '@phosphor-icons/react';
+import { CheckCircle, Circle, PencilSimple, Trash } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 import { buildFutureMonths, monthLabel } from '../lib/futureBills';
@@ -33,7 +33,7 @@ function Segmented({ value, onChange, options }) {
   );
 }
 
-function EstesMes({ bills, onTogglePaid, rendaCasal }) {
+function EstesMes({ bills, onTogglePaid, onEditBill, onDeleteBill, rendaCasal }) {
   const totalContas = bills.reduce((s, b) => s + b.value, 0);
   const saldo = rendaCasal - totalContas;
 
@@ -114,6 +114,37 @@ function EstesMes({ bills, onTogglePaid, rendaCasal }) {
                   <span style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums', color: b.paid ? color.textWeak : color.text }}>
                     {brl(b.value)}
                   </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const novoNome = window.prompt('Nome da conta:', b.name);
+                      if (novoNome === null) return;
+                      const novoDia = window.prompt('Dia de vencimento (1 a 31):', b.due);
+                      if (novoDia === null) return;
+                      const novoValorStr = window.prompt('Valor (só números, ex. 855):', b.value);
+                      if (novoValorStr === null) return;
+                      const novoValor = Number(String(novoValorStr).replace(',', '.'));
+                      if (!novoNome.trim() || Number.isNaN(novoValor) || novoValor < 0) {
+                        window.alert('Alguma dessas respostas não é válida. Tente de novo.');
+                        return;
+                      }
+                      onEditBill(b.id, { name: novoNome.trim(), due: Number(novoDia) || b.due, value: novoValor });
+                    }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                    aria-label={`Editar ${b.name}`}
+                  >
+                    <PencilSimple size={14} color={color.textWeak} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`Apagar a conta "${b.name}"?`)) onDeleteBill(b.id);
+                    }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                    aria-label={`Apagar ${b.name}`}
+                  >
+                    <Trash size={14} color={color.textWeak} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -173,7 +204,7 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao }) {
         }}
       >
         <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 4 }}>
-          Fatura de {monthLabel(state.month.label, selecionado)}
+          Previsão de {monthLabel(state.month.label, selecionado)}
         </div>
         <div style={{ fontSize: 24, fontWeight: 500, letterSpacing: '-.025em', fontVariantNumeric: 'tabular-nums', marginBottom: 6 }}>
           {brl(mes.total)}
@@ -182,9 +213,10 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao }) {
           {pctRenda.toFixed(0)}% da renda fixa do casal
           {alerta ? ' — passa de 42% da renda fixa' : ''}
         </div>
+        <div style={{ fontSize: 12, color: color.textMedium }}>Contas fixas do mês: {brl(mes.totalContasFixas)}</div>
         <div style={{ fontSize: 12, color: color.textMedium }}>Média de mercado: {brl(mes.mediaMercado)}</div>
         <div style={{ fontSize: 12, color: color.textMedium }}>
-          Parcelas em aberto: {brl(mes.total - mes.mediaMercado - mes.totalSimulacao)}
+          Parcelas em aberto: {brl(mes.total - mes.mediaMercado - mes.totalContasFixas - mes.totalSimulacao)}
         </div>
         {mes.totalSimulacao > 0 && (
           <div style={{ fontSize: 12, color: color.accentLight, marginTop: 4 }}>
@@ -192,6 +224,30 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao }) {
           </div>
         )}
       </div>
+
+      {mes.contasFixas.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 8 }}>Contas fixas (se repetem todo mês)</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+            {mes.contasFixas.map((b) => (
+              <div
+                key={b.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  background: color.surface,
+                  borderRadius: radius.row,
+                  padding: '10px 12px',
+                  fontSize: 13.5,
+                }}
+              >
+                <span>{b.name}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{brl(b.value)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 8 }}>Parcelas deste mês</div>
       {mes.parcelasAtivas.length === 0 ? (
@@ -325,7 +381,7 @@ function Simulador({ onLancar }) {
   );
 }
 
-export default function Bills({ state, onTogglePaid, onLancarInstallment, rendaCasal, rendaFixaCasal }) {
+export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, onLancarInstallment, rendaCasal, rendaFixaCasal }) {
   const [view, setView] = useState('mes');
   const [simulacao, setSimulacao] = useState(null);
 
@@ -343,7 +399,13 @@ export default function Bills({ state, onTogglePaid, onLancarInstallment, rendaC
       />
 
       {view === 'mes' ? (
-        <EstesMes bills={state.bills} onTogglePaid={onTogglePaid} rendaCasal={rendaCasal} />
+        <EstesMes
+          bills={state.bills}
+          onTogglePaid={onTogglePaid}
+          onEditBill={onEditBill}
+          onDeleteBill={onDeleteBill}
+          rendaCasal={rendaCasal}
+        />
       ) : (
         <>
           <MesesFuturos state={state} rendaFixaCasal={rendaFixaCasal} simulacao={simulacao} />

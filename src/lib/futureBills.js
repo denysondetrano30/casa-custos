@@ -1,10 +1,15 @@
-// Calcula a fatura futura de cada um dos próximos 6 meses.
+// Calcula a previsão de gastos de cada um dos próximos 6 meses.
 // README.md, seção "Fatura futura":
 //   total(mês k) = assinaturas no cartão + média de mercado
 //                  + Σ parcelas ativas em k + simulação(k)
 //   parcela ativa em k quando done + 1 + k <= count.
+// Além disso somamos as contas fixas (Aluguel, Água, Luz...): elas se
+// repetem todo mês, então valem também para os meses futuros, não só
+// para o mês atual.
 export function buildFutureMonths(state, simulacao) {
   const mediaMercado = state.cats.find((c) => c.id === 'mercado')?.budget || 0;
+  const contasFixas = state.bills || [];
+  const totalContasFixas = contasFixas.reduce((s, b) => s + b.value, 0);
   const months = [];
 
   for (let k = 0; k < 6; k++) {
@@ -25,8 +30,10 @@ export function buildFutureMonths(state, simulacao) {
       k,
       mediaMercado,
       parcelasAtivas,
+      contasFixas,
+      totalContasFixas,
       totalSimulacao,
-      total: mediaMercado + totalParcelas + totalSimulacao,
+      total: mediaMercado + totalContasFixas + totalParcelas + totalSimulacao,
     });
   }
 

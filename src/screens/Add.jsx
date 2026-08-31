@@ -1,15 +1,8 @@
 import { useState } from 'react';
-import { House, User, Receipt, TrendUp, Backspace } from '@phosphor-icons/react';
+import { House, User, Receipt, TrendUp, Backspace, Plus } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 import { mockCategories } from '../lib/mockData';
-
-// Categorias pessoais de exemplo — isso vai virar dado de verdade
-// quando ligarmos o estado global (próximo passo).
-const PERSONAL_CATEGORIES = {
-  Rui: ['Streaming', 'Academia', 'Assinaturas'],
-  Ana: ['Cabeleireiro', 'Streaming', 'Cursos'],
-};
 
 const TYPES = [
   { id: 'casa', label: 'Casa', Icon: House },
@@ -72,7 +65,14 @@ function TextInput(props) {
   );
 }
 
-export default function Add({ onClose, onSave, initialPerson, names = { Rui: 'Rui', Ana: 'Ana' } }) {
+export default function Add({
+  onClose,
+  onSave,
+  initialPerson,
+  names = { Rui: 'Rui', Ana: 'Ana' },
+  personalCategories = ['Streaming', 'Academia', 'Assinaturas', 'Cabeleireiro', 'Cursos'],
+  onAddPersonalCategory,
+}) {
   const [addType, setAddType] = useState('casa');
   const [raw, setRaw] = useState('');
 
@@ -81,7 +81,7 @@ export default function Add({ onClose, onSave, initialPerson, names = { Rui: 'Ru
   const [desc, setDesc] = useState('');
 
   const [addPerson, setAddPerson] = useState(initialPerson || 'Rui');
-  const [pcat, setPcat] = useState(PERSONAL_CATEGORIES[initialPerson || 'Rui'][0]);
+  const [pcat, setPcat] = useState(personalCategories[0] || '');
   const [addRecurring, setAddRecurring] = useState(true);
 
   const [addName, setAddName] = useState('');
@@ -202,14 +202,7 @@ export default function Add({ onClose, onSave, initialPerson, names = { Rui: 'Ru
           <Field label="Pessoa">
             <div style={{ display: 'flex', gap: 8 }}>
               {['Rui', 'Ana'].map((p) => (
-                <Chip
-                  key={p}
-                  active={addPerson === p}
-                  onClick={() => {
-                    setAddPerson(p);
-                    setPcat(PERSONAL_CATEGORIES[p][0]);
-                  }}
-                >
+                <Chip key={p} active={addPerson === p} onClick={() => setAddPerson(p)}>
                   {names[p]}
                 </Chip>
               ))}
@@ -217,11 +210,37 @@ export default function Add({ onClose, onSave, initialPerson, names = { Rui: 'Ru
           </Field>
           <Field label="Categoria">
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {PERSONAL_CATEGORIES[addPerson].map((c) => (
+              {personalCategories.map((c) => (
                 <Chip key={c} active={pcat === c} onClick={() => setPcat(c)}>
                   {c}
                 </Chip>
               ))}
+              {onAddPersonalCategory && (
+                <button
+                  onClick={() => {
+                    const nome = window.prompt('Nome da nova categoria (ex. Pilates):');
+                    if (!nome || !nome.trim()) return;
+                    const limpo = nome.trim();
+                    onAddPersonalCategory(limpo);
+                    setPcat(limpo);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '8px 14px',
+                    borderRadius: radius.chip,
+                    border: `1px dashed ${color.border}`,
+                    background: 'transparent',
+                    color: color.textMedium,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <Plus size={13} /> Nova
+                </button>
+              )}
             </div>
           </Field>
           <Field label="Frequência">

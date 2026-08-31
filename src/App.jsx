@@ -160,10 +160,50 @@ export default function App() {
     }));
   }
 
+  function editPersonalItem(pessoa, bucket, id, dados) {
+    setState((prev) => ({
+      ...prev,
+      personal: {
+        ...prev.personal,
+        [pessoa]: {
+          ...prev.personal[pessoa],
+          [bucket]: prev.personal[pessoa][bucket].map((item) => (item.id === id ? { ...item, ...dados } : item)),
+        },
+      },
+    }));
+  }
+
+  function deletePersonalItem(pessoa, bucket, id) {
+    setState((prev) => ({
+      ...prev,
+      personal: {
+        ...prev.personal,
+        [pessoa]: {
+          ...prev.personal[pessoa],
+          [bucket]: prev.personal[pessoa][bucket].filter((item) => item.id !== id),
+        },
+      },
+    }));
+  }
+
   function togglePaid(id) {
     setState((prev) => ({
       ...prev,
       bills: prev.bills.map((b) => (b.id === id ? { ...b, paid: !b.paid } : b)),
+    }));
+  }
+
+  function editBill(id, dados) {
+    setState((prev) => ({
+      ...prev,
+      bills: prev.bills.map((b) => (b.id === id ? { ...b, ...dados } : b)),
+    }));
+  }
+
+  function deleteBill(id) {
+    setState((prev) => ({
+      ...prev,
+      bills: prev.bills.filter((b) => b.id !== id),
     }));
   }
 
@@ -290,6 +330,14 @@ export default function App() {
     setState((prev) => ({ ...prev, names: { ...prev.names, [pessoa]: nome } }));
   }
 
+  function addPersonalCategory(nome) {
+    setState((prev) => {
+      const atuais = prev.personalCategories || [];
+      if (atuais.includes(nome)) return prev;
+      return { ...prev, personalCategories: [...atuais, nome] };
+    });
+  }
+
   if (carregandoAuth) {
     return <div style={{ minHeight: '100vh', background: color.bg }} />;
   }
@@ -339,6 +387,8 @@ export default function App() {
       <Bills
         state={state}
         onTogglePaid={togglePaid}
+        onEditBill={editBill}
+        onDeleteBill={deleteBill}
         onLancarInstallment={lancarInstallment}
         rendaCasal={rendaCasal}
         rendaFixaCasal={rendaCasal}
@@ -372,6 +422,8 @@ export default function App() {
         houseId={houseId}
         names={names}
         onUpdateName={updateName}
+        onEditPersonalItem={editPersonalItem}
+        onDeletePersonalItem={deletePersonalItem}
       />
     ),
   };
@@ -380,7 +432,14 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh', background: color.bg }}>
       {adding ? (
-        <Add onClose={() => setAdding(null)} onSave={handleSaveEntry} initialPerson={adding.person} names={names} />
+        <Add
+          onClose={() => setAdding(null)}
+          onSave={handleSaveEntry}
+          initialPerson={adding.person}
+          names={names}
+          personalCategories={state.personalCategories}
+          onAddPersonalCategory={addPersonalCategory}
+        />
       ) : (
         <>
           <Screen />

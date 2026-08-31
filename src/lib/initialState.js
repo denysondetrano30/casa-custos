@@ -44,6 +44,11 @@ export const initialState = {
     Ana: { fixed: [], variable: [] },
   },
 
+  // Lista de categorias de gasto pessoal (Streaming, Academia, etc.),
+  // compartilhada pelas duas pessoas da casa. Começa com algumas sugestões,
+  // mas dá pra adicionar outras direto na tela de Adicionar → Pessoal.
+  personalCategories: ['Streaming', 'Academia', 'Assinaturas', 'Cabeleireiro', 'Cursos'],
+
   shop: {
     items: [],
     method: 'debito',
