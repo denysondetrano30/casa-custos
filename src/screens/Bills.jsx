@@ -225,9 +225,10 @@ function EstesMes({
             ))}
           </div>
           <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6 }}>
-            Essas compras vêm do extrato importado e sempre contam no saldo acima. Toque numa pra marcar como paga —
-            aí ela sai do valor dividido na Divisão e no Perfil, porque já foi resolvida de outro jeito. Na Divisão,
-            as de Mercado entram separadas; as outras juntam numa fatura só.
+            Essas compras vêm do extrato importado (ou lançadas na mão) e sempre contam no saldo acima. Toque numa
+            pra marcar como paga — aí ela sai do valor dividido na Divisão e no Perfil, porque já foi resolvida de
+            outro jeito. Na Divisão, todas juntam numa fatura só por cartão, mesmo as categorizadas como Mercado —
+            a categoria aqui é só pra saber onde foi o dinheiro.
           </div>
         </div>
       )}

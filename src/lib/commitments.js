@@ -5,15 +5,17 @@
 // não é um valor já gasto ou já comprometido, então não entra na divisão.
 
 // Dado uma compra conjunta, decide em qual "compromisso" da divisão ela
-// entra. Mercado continua item por item (geralmente é só uma ou duas
-// compras avulsas no cartão, não uma fatura cheia). O resto (Uber,
-// farmácia, manutenção...) junta numa fatura só — é assim que sai do
-// bolso de vocês de verdade, numa cobrança só do cartão no fim do mês,
-// não uma dívida separada por compra. Quando a compra já tiver um cartão
-// identificado (ver cadastro de cartões), agrupa por cartão; enquanto
-// isso não existe pra ela, cai numa fatura geral única.
+// entra. Toda compra que veio do cartão (importada por CSV ou lançada na
+// mão) junta numa fatura só, mesmo que seja categorizada como Mercado —
+// é assim que sai do bolso de vocês de verdade, numa cobrança só do
+// cartão no fim do mês, não uma dívida separada por compra. A categoria
+// "Mercado" aqui é só pra saber "onde foi" o dinheiro, não muda como ela
+// entra na divisão. (O mercado do dia a dia, registrado pela aba Feira,
+// é outra coisa completamente — nem passa por aqui, ver nota acima.)
+// Quando a compra já tiver um cartão identificado (ver cadastro de
+// cartões), agrupa por cartão; enquanto isso não existe pra ela, cai numa
+// fatura geral única.
 export function commitmentIdForSharedPurchase(p) {
-  if (p.category === 'mercado') return `shared-${p.id}`;
   return `cartao-${p.cardId || '_geral'}`;
 }
 
@@ -32,15 +34,8 @@ export function buildCommitments(state) {
   // marcada como paga — ver nota no Perfil.)
   const compras = (state.sharedPurchases || []).filter((p) => !p.paid);
 
-  compras
-    .filter((p) => p.category === 'mercado')
-    .forEach((p) => {
-      commitments.push({ id: `shared-${p.id}`, name: p.name, value: p.value });
-    });
-
-  const outras = compras.filter((p) => p.category !== 'mercado');
   const porCartao = {};
-  outras.forEach((p) => {
+  compras.forEach((p) => {
     const chave = p.cardId || '_geral';
     (porCartao[chave] = porCartao[chave] || []).push(p);
   });
