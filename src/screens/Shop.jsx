@@ -258,6 +258,7 @@ export default function Shop({
   onChangeDebitPart,
   onFinalizar,
   purchases,
+  onDeletePurchase,
   names = { Rui: 'Rui', Ana: 'Ana' },
 }) {
   const total = shop.items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
@@ -317,9 +318,35 @@ export default function Shop({
                   fontSize: 13,
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                   <span>{p.date}</span>
-                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{brl(p.total)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{brl(p.total)}</span>
+                    {onDeletePurchase && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm('Apagar esta compra? Isso também tira o valor do gasto de Mercado.')) {
+                            onDeletePurchase(p.id);
+                          }
+                        }}
+                        title="Apagar compra"
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 99,
+                          border: `1px solid ${color.border}`,
+                          background: 'transparent',
+                          color: color.textWeak,
+                          display: 'grid',
+                          placeItems: 'center',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {p.debit > 0 && p.credit > 0 && (
                   <div style={{ fontSize: 11, color: color.textWeak, marginTop: 2 }}>

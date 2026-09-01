@@ -1,4 +1,4 @@
-import { CaretLeft, CaretRight, DownloadSimple, PencilSimple } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, DownloadSimple, PencilSimple, Trash } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 
@@ -207,7 +207,7 @@ function ImportCard({ onClick }) {
   );
 }
 
-function RecentTransactions({ txs }) {
+function RecentTransactions({ txs, onDeleteTx }) {
   return (
     <div>
       <SectionLabel>Últimos lançamentos</SectionLabel>
@@ -247,6 +247,17 @@ function RecentTransactions({ txs }) {
               <div style={{ fontSize: 11, color: color.textWeak }}>{tx.meta}</div>
             </div>
             <div style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{brl(tx.value)}</div>
+            {onDeleteTx && (
+              <button
+                onClick={() => {
+                  if (window.confirm(`Apagar "${tx.desc}"? Isso também tira o valor da categoria.`)) onDeleteTx(tx.id);
+                }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                aria-label={`Apagar ${tx.desc}`}
+              >
+                <Trash size={14} color={color.textWeak} />
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -254,7 +265,7 @@ function RecentTransactions({ txs }) {
   );
 }
 
-export default function Home({ month, cats, txs, onEditCategoryBudget, rendaCasal, billsTotal, bills = [], sharedPurchases = [], onImport }) {
+export default function Home({ month, cats, txs, onEditCategoryBudget, rendaCasal, billsTotal, bills = [], sharedPurchases = [], onImport, onDeleteTx }) {
   const spent = cats.reduce((sum, c) => sum + c.spent, 0);
   const gastoTotal = spent + billsTotal;
 
@@ -291,7 +302,7 @@ export default function Home({ month, cats, txs, onEditCategoryBudget, rendaCasa
       <HeroCard month={month} gastoTotal={gastoTotal} rendaCasal={rendaCasal} />
       <CategoriesSection cats={cats} bills={bills} sharedPurchases={sharedPurchases} onEditBudget={handleEditBudget} />
       <ImportCard onClick={onImport} />
-      <RecentTransactions txs={txs} />
+      <RecentTransactions txs={txs} onDeleteTx={onDeleteTx} />
     </div>
   );
 }

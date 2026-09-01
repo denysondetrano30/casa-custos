@@ -84,7 +84,12 @@ function ProporcaoCard({ pctRui, onChangePctRui, income, total, names }) {
   const pctAna = 100 - pctRui;
   const alvoRui = (total * pctRui) / 100;
   const alvoAna = (total * pctAna) / 100;
-  const pctPelaRenda = Math.round((income.Rui / (income.Rui + income.Ana)) * 100);
+  const rendaTotal = income.Rui + income.Ana;
+  // Se ninguém ainda cadastrou renda fixa, essa conta (Rui / soma) daria uma
+  // divisão por zero — em vez de deixar o botão gravar um valor inválido na
+  // divisão do casal, ele fica desabilitado até existir renda cadastrada.
+  const pelaRendaDisponivel = rendaTotal > 0;
+  const pctPelaRenda = pelaRendaDisponivel ? Math.round((income.Rui / rendaTotal) * 100) : null;
 
   return (
     <div
@@ -133,18 +138,20 @@ function ProporcaoCard({ pctRui, onChangePctRui, income, total, names }) {
           </button>
         ))}
         <button
-          onClick={() => onChangePctRui(pctPelaRenda)}
+          onClick={() => pelaRendaDisponivel && onChangePctRui(pctPelaRenda)}
+          disabled={!pelaRendaDisponivel}
+          title={pelaRendaDisponivel ? undefined : 'Cadastre a renda fixa dos dois primeiro'}
           style={{
             padding: '7px 12px',
             borderRadius: 99,
-            border: `1px solid ${pctRui === pctPelaRenda ? color.accent : color.border}`,
-            background: pctRui === pctPelaRenda ? color.surfaceElevated : 'transparent',
-            color: pctRui === pctPelaRenda ? color.accentChipText : 'rgba(233,233,237,.6)',
+            border: `1px solid ${pelaRendaDisponivel && pctRui === pctPelaRenda ? color.accent : color.border}`,
+            background: pelaRendaDisponivel && pctRui === pctPelaRenda ? color.surfaceElevated : 'transparent',
+            color: !pelaRendaDisponivel ? 'rgba(233,233,237,.3)' : pctRui === pctPelaRenda ? color.accentChipText : 'rgba(233,233,237,.6)',
             fontSize: 12.5,
-            cursor: 'pointer',
+            cursor: pelaRendaDisponivel ? 'pointer' : 'default',
           }}
         >
-          pela renda · {pctPelaRenda}/{100 - pctPelaRenda}
+          {pelaRendaDisponivel ? `pela renda · ${pctPelaRenda}/${100 - pctPelaRenda}` : 'pela renda · sem renda cadastrada'}
         </button>
       </div>
     </div>

@@ -11,6 +11,11 @@ export const initialState = {
   // sempre isto aqui, editável no Perfil.
   names: { Rui: 'Pessoa 1', Ana: 'Pessoa 2' },
 
+  // Senha de cada pessoa pra travar o app (ver src/lib/security.js) — guarda
+  // só um hash, nunca a senha em texto puro. null = pessoa não cadastrou
+  // senha ainda. Enquanto nenhuma das duas tiver senha, o app abre direto.
+  pins: { Rui: null, Ana: null },
+
   month: {
     label: 'Agosto 2026',
     today: 30,
@@ -38,6 +43,10 @@ export const initialState = {
 
   installments: [],
 
+  // Resumo de cada mês já fechado (ver src/lib/monthClose.js) — usado na
+  // aba Contas → Histórico pra comparar a evolução mês a mês.
+  historico: [],
+
   goals: [],
 
   splitPct: { Rui: 80, Ana: 20 },
@@ -48,6 +57,14 @@ export const initialState = {
   personal: {
     Rui: { fixed: [], variable: [] },
     Ana: { fixed: [], variable: [] },
+  },
+
+  // Registro de recebimentos PJ de cada pessoa (data/mês + valor), pensado
+  // pra ajudar na declaração de imposto de renda anual. Não entra em nenhum
+  // cálculo de orçamento ou divisão — é só um histórico.
+  recebimentosPJ: {
+    Rui: [],
+    Ana: [],
   },
 
   // Lista de categorias de gasto pessoal (Streaming, Academia, etc.),

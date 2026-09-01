@@ -13,12 +13,17 @@ import Shop from './screens/Shop';
 import Login from './screens/Login';
 import HouseSetup from './screens/HouseSetup';
 import ImportExtrato from './screens/ImportExtrato';
+import Lock from './screens/Lock';
 import { color } from './lib/tokens';
 import { auth, db } from './lib/firebase';
 import { useHouseData } from './hooks/useHouseData';
 import { initialState } from './lib/initialState';
 import { buildCommitments } from './lib/commitments';
 import { splitBills } from './lib/split';
+import { buildSnapshot, resetForNextMonth } from './lib/monthClose';
+import { hashPin } from './lib/security';
+
+const CHAVE_DESBLOQUEADO = 'casa:desbloqueado';
 
 // Telas que ainda não existem: por enquanto mostram um aviso simples,
 // para não quebrar a navegação enquanto construímos uma de cada vez.
@@ -35,6 +40,17 @@ export default function App() {
   const [adding, setAdding] = useState(null); // null = fechado, ou { person } quando aberto
   const [importing, setImporting] = useState(false);
   const [profilePerson, setProfilePerson] = useState('Rui');
+
+  // Trava do app: se alguém já cadastrou uma senha, o app pede ela toda vez
+  // que for aberto de novo. "Aberto de novo" = sessionStorage, que some
+  // quando a aba/app é fechado de verdade (diferente de só trocar de tela).
+  const [desbloqueado, setDesbloqueado] = useState(() => {
+    try {
+      return sessionStorage.getItem(CHAVE_DESBLOQUEADO) === '1';
+    } catch {
+      return false;
+    }
+  });
 
   // Controle de login: enquanto o Firebase ainda não respondeu se tem
   // alguém logado, "carregandoAuth" fica true e mostramos uma tela vazia
@@ -97,6 +113,7 @@ export default function App() {
               id: Date.now(),
               desc: desc || prev.cats.find((c) => c.id === cat)?.name || 'Gasto',
               icon: prev.cats.find((c) => c.id === cat)?.icon,
+              catId: cat,
               meta: `${payer} · hoje`,
               value,
             },
@@ -272,6 +289,7 @@ export default function App() {
           id: purchaseId,
           desc: 'Mercado',
           icon: 'ph-basket',
+          catId: 'mercado',
           meta: `${payer} · hoje · ${METODO_LABEL[prev.shop.method]}`,
           value: credito,
         });
@@ -280,6 +298,7 @@ export default function App() {
             id: purchaseId + 1,
             desc: 'Mercado',
             icon: 'ph-basket',
+            catId: 'mercado',
             meta: 'hoje · Débito (parte da compra)',
             value: debito,
           });
@@ -289,6 +308,7 @@ export default function App() {
           id: purchaseId,
           desc: 'Mercado',
           icon: 'ph-basket',
+          catId: 'mercado',
           meta: `hoje · ${METODO_LABEL[prev.shop.method]}`,
           value: total,
         });
@@ -314,6 +334,49 @@ export default function App() {
     });
   }
 
+  // Apaga uma compra registrada na Feira. Isso desfaz tudo que aquela
+  // compra tinha gerado: o(s) lançamento(s) em txs (que ela criou com o
+  // mesmo id, e id+1 quando foi pagamento misto crédito+débito) e o valor
+  // somado em Mercado — senão a compra some da lista mas o gasto continua
+  // contando, ou o lançamento é apagado só pela metade.
+  function deletePurchase(id) {
+    setState((prev) => {
+      const purchase = prev.purchases.find((p) => p.id === id);
+      if (!purchase) return prev;
+      const idsTxsDaCompra = new Set([id, id + 1]);
+      return {
+        ...prev,
+        cats: prev.cats.map((c) => (c.id === 'mercado' ? { ...c, spent: Math.max(0, c.spent - purchase.total) } : c)),
+        txs: prev.txs.filter((t) => !idsTxsDaCompra.has(t.id)),
+        purchases: prev.purchases.filter((p) => p.id !== id),
+      };
+    });
+  }
+
+  // Apaga um lançamento da tela Início e também tira o valor da categoria
+  // (senão o "Onde foi" continuaria contando um gasto que não existe mais).
+  // Lançamentos mais antigos não guardam o id da categoria (catId) — pra
+  // esses, a gente descobre a categoria pelo ícone, que sempre bateu certo.
+  function deleteTx(id) {
+    setState((prev) => {
+      const tx = prev.txs.find((t) => t.id === id);
+      if (!tx) return prev;
+      const catId = tx.catId || prev.cats.find((c) => c.icon === tx.icon)?.id;
+      return {
+        ...prev,
+        cats: catId ? prev.cats.map((c) => (c.id === catId ? { ...c, spent: Math.max(0, c.spent - tx.value) } : c)) : prev.cats,
+        txs: prev.txs.filter((t) => t.id !== id),
+      };
+    });
+  }
+
+  function deleteInstallment(id) {
+    setState((prev) => ({
+      ...prev,
+      installments: prev.installments.filter((p) => p.id !== id),
+    }));
+  }
+
   function editCategoryBudget(id, budget) {
     setState((prev) => ({
       ...prev,
@@ -326,6 +389,39 @@ export default function App() {
       ...prev,
       goals: [...prev.goals, { id: Date.now(), name: goal.name, target: goal.target, saved: 0, monthly: goal.monthly }],
     }));
+  }
+
+  // Registra um aporte (dinheiro guardado de verdade) numa meta, somando ao
+  // que já tinha sido guardado — é isso que faz a barra de progresso andar.
+  function addAporteGoal(id, valor) {
+    setState((prev) => ({
+      ...prev,
+      goals: prev.goals.map((g) => (g.id === id ? { ...g, saved: Math.max(0, g.saved + valor) } : g)),
+    }));
+  }
+
+  function editGoal(id, dados) {
+    setState((prev) => ({
+      ...prev,
+      goals: prev.goals.map((g) => (g.id === id ? { ...g, ...dados } : g)),
+    }));
+  }
+
+  function deleteGoal(id) {
+    setState((prev) => ({
+      ...prev,
+      goals: prev.goals.filter((g) => g.id !== id),
+    }));
+  }
+
+  // Define/troca a senha de uma pessoa. Guarda só o hash (ver lib/security.js).
+  async function setPinPessoa(pessoa, pin) {
+    const hash = await hashPin(pin);
+    setState((prev) => ({ ...prev, pins: { ...(prev.pins || {}), [pessoa]: hash } }));
+  }
+
+  function removePinPessoa(pessoa) {
+    setState((prev) => ({ ...prev, pins: { ...(prev.pins || {}), [pessoa]: null } }));
   }
 
   function updateName(pessoa, nome) {
@@ -402,6 +498,49 @@ export default function App() {
     }));
   }
 
+  // Recebimentos PJ (declaração anual) — só um histórico manual, não entra
+  // em nenhum cálculo de orçamento ou divisão do casal.
+  function addRecebimentoPJ(pessoa, dados) {
+    setState((prev) => ({
+      ...prev,
+      recebimentosPJ: {
+        ...prev.recebimentosPJ,
+        [pessoa]: [...(prev.recebimentosPJ?.[pessoa] || []), { id: Date.now() + Math.random(), ...dados }],
+      },
+    }));
+  }
+
+  function editRecebimentoPJ(pessoa, id, dados) {
+    setState((prev) => ({
+      ...prev,
+      recebimentosPJ: {
+        ...prev.recebimentosPJ,
+        [pessoa]: (prev.recebimentosPJ?.[pessoa] || []).map((item) => (item.id === id ? { ...item, ...dados } : item)),
+      },
+    }));
+  }
+
+  function deleteRecebimentoPJ(pessoa, id) {
+    setState((prev) => ({
+      ...prev,
+      recebimentosPJ: {
+        ...prev.recebimentosPJ,
+        [pessoa]: (prev.recebimentosPJ?.[pessoa] || []).filter((item) => item.id !== id),
+      },
+    }));
+  }
+
+  // Fecha o mês atual: guarda um resumo dele no histórico e zera o que é
+  // "deste mês" (gastos, compras de cartão, gastos pessoais variáveis,
+  // entradas extras), preparando o app pro mês seguinte. Contas fixas,
+  // parcelas, metas e contas pessoais fixas continuam do jeito que estão.
+  function fecharMes() {
+    setState((prev) => {
+      const snapshot = buildSnapshot(prev);
+      return resetForNextMonth(prev, snapshot);
+    });
+  }
+
   function addPersonalCategory(nome) {
     setState((prev) => {
       const atuais = prev.personalCategories || [];
@@ -424,6 +563,23 @@ export default function App() {
     return <HouseSetup onHouseReady={setHouseId} />;
   }
 
+  const temSenhaCadastrada = !!(state.pins && (state.pins.Rui || state.pins.Ana));
+  if (temSenhaCadastrada && !desbloqueado) {
+    return (
+      <Lock
+        pins={state.pins}
+        onUnlock={() => {
+          try {
+            sessionStorage.setItem(CHAVE_DESBLOQUEADO, '1');
+          } catch {
+            /* sem sessionStorage disponível, segue sem lembrar */
+          }
+          setDesbloqueado(true);
+        }}
+      />
+    );
+  }
+
   const outraPessoa = { Rui: 'Ana', Ana: 'Rui' };
   const extrasTotal = (pessoa) => state.extras[pessoa].reduce((s, e) => s + e.v, 0);
   const rendaCasalTotal =
@@ -444,6 +600,7 @@ export default function App() {
         rendaCasal={rendaCasalTotal}
         billsTotal={billsTotal}
         onImport={() => setImporting(true)}
+        onDeleteTx={deleteTx}
       />
     ),
     shop: () => (
@@ -456,6 +613,7 @@ export default function App() {
         onChangeDebitPart={shopChangeDebitPart}
         onFinalizar={shopFinalizar}
         purchases={state.purchases}
+        onDeletePurchase={deletePurchase}
         names={names}
       />
     ),
@@ -467,6 +625,8 @@ export default function App() {
         onDeleteBill={deleteBill}
         onDeleteSharedPurchase={deleteSharedPurchase}
         onLancarInstallment={lancarInstallment}
+        onDeleteInstallment={deleteInstallment}
+        onFecharMes={fecharMes}
         rendaCasal={rendaCasal}
         rendaFixaCasal={rendaCasal}
       />
@@ -482,7 +642,16 @@ export default function App() {
         names={names}
       />
     ),
-    goals: () => <Goals goals={state.goals} baseMonthLabel={state.month.label} onAddGoal={addGoal} />,
+    goals: () => (
+      <Goals
+        goals={state.goals}
+        baseMonthLabel={state.month.label}
+        onAddGoal={addGoal}
+        onAporteGoal={addAporteGoal}
+        onEditGoal={editGoal}
+        onDeleteGoal={deleteGoal}
+      />
+    ),
     profile: () => (
       <Profile
         person={profilePerson}
@@ -501,6 +670,13 @@ export default function App() {
         onUpdateName={updateName}
         onEditPersonalItem={editPersonalItem}
         onDeletePersonalItem={deletePersonalItem}
+        recebimentosPJ={state.recebimentosPJ}
+        onAddRecebimentoPJ={addRecebimentoPJ}
+        onEditRecebimentoPJ={editRecebimentoPJ}
+        onDeleteRecebimentoPJ={deleteRecebimentoPJ}
+        pins={state.pins}
+        onSetPin={setPinPessoa}
+        onRemovePin={removePinPessoa}
       />
     ),
   };

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Target, Plus } from '@phosphor-icons/react';
+import { Target, Plus, Trash, PencilSimple, PiggyBank } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 import { monthLabel } from '../lib/futureBills';
@@ -20,7 +20,7 @@ function mesesAte(baseMonthLabel, valorInputMonth) {
   return alvoTotal - baseTotal;
 }
 
-function GoalCard({ goal, baseMonthLabel }) {
+function GoalCard({ goal, baseMonthLabel, onAporte, onEdit, onDelete }) {
   const pct = Math.min(100, (goal.saved / goal.target) * 100);
   const falta = Math.max(0, goal.target - goal.saved);
   const mesesRestantes = goal.monthly > 0 ? Math.ceil(falta / goal.monthly) : null;
@@ -29,6 +29,33 @@ function GoalCard({ goal, baseMonthLabel }) {
     : mesesRestantes === 0
       ? 'concluída'
       : `previsão: ${monthLabel(baseMonthLabel, mesesRestantes)}`;
+
+  function registrarAporte() {
+    const resp = window.prompt(`Quanto você guardou para "${goal.name}" este mês?`, String(goal.monthly || ''));
+    if (resp === null) return;
+    const valor = Number(String(resp).replace(',', '.'));
+    if (!Number.isFinite(valor) || valor === 0) return;
+    onAporte(goal.id, valor);
+  }
+
+  function editar() {
+    const nome = window.prompt('Nome da meta:', goal.name);
+    if (nome === null) return;
+    const alvo = window.prompt('Valor alvo:', String(goal.target));
+    if (alvo === null) return;
+    const mensal = window.prompt('Aporte mensal:', String(goal.monthly));
+    if (mensal === null) return;
+    const target = Number(String(alvo).replace(',', '.'));
+    const monthly = Number(String(mensal).replace(',', '.'));
+    if (!Number.isFinite(target) || target <= 0) return;
+    onEdit(goal.id, { name: nome.trim() || goal.name, target, monthly: Number.isFinite(monthly) ? monthly : goal.monthly });
+  }
+
+  function apagar() {
+    if (window.confirm(`Apagar a meta "${goal.name}"? Isso não pode ser desfeito.`)) {
+      onDelete(goal.id);
+    }
+  }
 
   return (
     <div
@@ -57,6 +84,20 @@ function GoalCard({ goal, baseMonthLabel }) {
           <div style={{ fontSize: 14 }}>{goal.name}</div>
           <div style={{ fontSize: 11, color: color.textWeak }}>{previsao}</div>
         </div>
+        <button
+          onClick={editar}
+          title="Editar meta"
+          style={{ width: 26, height: 26, borderRadius: 99, border: `1px solid ${color.border}`, background: 'transparent', color: color.textMedium, display: 'grid', placeItems: 'center', cursor: 'pointer', flexShrink: 0 }}
+        >
+          <PencilSimple size={13} />
+        </button>
+        <button
+          onClick={apagar}
+          title="Apagar meta"
+          style={{ width: 26, height: 26, borderRadius: 99, border: `1px solid ${color.border}`, background: 'transparent', color: color.alertText, display: 'grid', placeItems: 'center', cursor: 'pointer', flexShrink: 0 }}
+        >
+          <Trash size={13} />
+        </button>
       </div>
 
       <div style={{ fontSize: 13.5, marginBottom: 8, fontVariantNumeric: 'tabular-nums' }}>
@@ -73,8 +114,27 @@ function GoalCard({ goal, baseMonthLabel }) {
         />
       </div>
 
-      <div style={{ fontSize: 11.5, color: color.textMedium }}>
-        Aporte mensal {brl(goal.monthly)} · {pct.toFixed(0)}%
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: 11.5, color: color.textMedium }}>
+          Aporte mensal {brl(goal.monthly)} · {pct.toFixed(0)}%
+        </div>
+        <button
+          onClick={registrarAporte}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '5px 10px',
+            borderRadius: 99,
+            border: `1px solid ${color.accent}`,
+            background: color.accentSoft,
+            color: color.accentLight,
+            fontSize: 11.5,
+            cursor: 'pointer',
+          }}
+        >
+          <PiggyBank size={13} /> Registrar aporte
+        </button>
       </div>
     </div>
   );
@@ -181,7 +241,7 @@ function NovaMetaForm({ onAdd, onClose, baseMonthLabel }) {
   );
 }
 
-export default function Goals({ goals, baseMonthLabel, onAddGoal }) {
+export default function Goals({ goals, baseMonthLabel, onAddGoal, onAporteGoal, onEditGoal, onDeleteGoal }) {
   const [criando, setCriando] = useState(false);
 
   return (
@@ -225,7 +285,14 @@ export default function Goals({ goals, baseMonthLabel, onAddGoal }) {
       )}
 
       {goals.map((goal) => (
-        <GoalCard key={goal.id} goal={goal} baseMonthLabel={baseMonthLabel} />
+        <GoalCard
+          key={goal.id}
+          goal={goal}
+          baseMonthLabel={baseMonthLabel}
+          onAporte={onAporteGoal}
+          onEdit={onEditGoal}
+          onDelete={onDeleteGoal}
+        />
       ))}
     </div>
   );

@@ -3,6 +3,7 @@ import { CheckCircle, Circle, PencilSimple, Trash } from '@phosphor-icons/react'
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 import { buildFutureMonths, monthLabel } from '../lib/futureBills';
+import Historico from './Historico';
 
 function Segmented({ value, onChange, options }) {
   return (
@@ -33,7 +34,7 @@ function Segmented({ value, onChange, options }) {
   );
 }
 
-function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDeleteBill, onDeleteSharedPurchase, rendaCasal }) {
+function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDeleteBill, onDeleteSharedPurchase, rendaCasal, mesAtualLabel, onFecharMes }) {
   const totalContas = bills.reduce((s, b) => s + b.value, 0);
   const totalCompras = sharedPurchases.reduce((s, p) => s + p.value, 0);
   const saldo = rendaCasal - totalContas - totalCompras;
@@ -189,11 +190,40 @@ function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDel
             </div>
           </div>
         ))}
+
+      {onFecharMes && (
+        <div style={{ marginTop: 26, borderTop: `1px solid ${color.borderSubtle}`, paddingTop: 18 }}>
+          <button
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Fechar ${mesAtualLabel} e começar o mês seguinte?\n\nIsso guarda um resumo de ${mesAtualLabel} no Histórico e zera os gastos, compras de cartão e gastos pessoais variáveis pro mês novo. Contas fixas, parcelas e metas continuam do jeito que estão.`
+                )
+              ) {
+                onFecharMes();
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '13px 0',
+              borderRadius: radius.row,
+              border: `1px solid ${color.accent}`,
+              background: 'transparent',
+              color: color.accentLight,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            Fechar {mesAtualLabel} e começar mês seguinte
+          </button>
+        </div>
+      )}
     </>
   );
 }
 
-function MesesFuturos({ state, rendaFixaCasal, simulacao }) {
+function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment }) {
   const [selecionado, setSelecionado] = useState(0);
   const meses = buildFutureMonths(state, simulacao);
   const maxTotal = Math.max(...meses.map((m) => m.total), 1);
@@ -253,9 +283,8 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao }) {
           {alerta ? ' — passa de 42% da renda fixa' : ''}
         </div>
         <div style={{ fontSize: 12, color: color.textMedium }}>Contas fixas do mês: {brl(mes.totalContasFixas)}</div>
-        <div style={{ fontSize: 12, color: color.textMedium }}>Média de mercado: {brl(mes.mediaMercado)}</div>
         <div style={{ fontSize: 12, color: color.textMedium }}>
-          Parcelas em aberto: {brl(mes.total - mes.mediaMercado - mes.totalContasFixas - mes.totalSimulacao)}
+          Parcelas em aberto: {brl(mes.total - mes.totalContasFixas - mes.totalSimulacao)}
         </div>
         {mes.totalSimulacao > 0 && (
           <div style={{ fontSize: 12, color: color.accentLight, marginTop: 4 }}>
@@ -298,17 +327,33 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao }) {
               key={p.id}
               style={{
                 display: 'flex',
+                alignItems: 'center',
                 justifyContent: 'space-between',
+                gap: 8,
                 background: color.surface,
                 borderRadius: radius.row,
                 padding: '10px 12px',
                 fontSize: 13.5,
               }}
             >
-              <span>
+              <span style={{ minWidth: 0 }}>
                 {p.name} <span style={{ color: color.textWeak, fontSize: 11.5 }}>· parcela {p.parcelaAtual} de {p.count}</span>
               </span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{brl(p.value)}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{brl(p.value)}</span>
+                {onDeleteInstallment && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Apagar todas as parcelas de "${p.name}"? Isso remove de todos os meses futuros.`))
+                        onDeleteInstallment(p.id);
+                    }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                    aria-label={`Apagar parcelas de ${p.name}`}
+                  >
+                    <Trash size={14} color={color.textWeak} />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -420,7 +465,7 @@ function Simulador({ onLancar }) {
   );
 }
 
-export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, onDeleteSharedPurchase, onLancarInstallment, rendaCasal, rendaFixaCasal }) {
+export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, onDeleteSharedPurchase, onLancarInstallment, onDeleteInstallment, onFecharMes, rendaCasal, rendaFixaCasal }) {
   const [view, setView] = useState('mes');
   const [simulacao, setSimulacao] = useState(null);
 
@@ -434,10 +479,11 @@ export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, o
         options={[
           { id: 'mes', label: 'Este mês' },
           { id: 'futuro', label: 'Meses futuros' },
+          { id: 'historico', label: 'Histórico' },
         ]}
       />
 
-      {view === 'mes' ? (
+      {view === 'mes' && (
         <EstesMes
           bills={state.bills}
           sharedPurchases={state.sharedPurchases || []}
@@ -446,10 +492,16 @@ export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, o
           onDeleteBill={onDeleteBill}
           onDeleteSharedPurchase={onDeleteSharedPurchase}
           rendaCasal={rendaCasal}
+          mesAtualLabel={state.month.label}
+          onFecharMes={onFecharMes}
         />
-      ) : (
+      )}
+
+      {view === 'historico' && <Historico historico={state.historico || []} />}
+
+      {view === 'futuro' && (
         <>
-          <MesesFuturos state={state} rendaFixaCasal={rendaFixaCasal} simulacao={simulacao} />
+          <MesesFuturos state={state} rendaFixaCasal={rendaFixaCasal} simulacao={simulacao} onDeleteInstallment={onDeleteInstallment} />
           <div style={{ marginTop: 20 }}>
             <Simulador
               onLancar={(sim) => {

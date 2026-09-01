@@ -1,8 +1,9 @@
 // Monta a lista de "compromissos do mês" que alimenta o algoritmo de
-// divisão (src/lib/split.js): contas fixas + o orçamento de mercado.
-// README.md, seção "Divisão das contas — algoritmo".
+// divisão (src/lib/split.js): só dinheiro real, comprometido de verdade —
+// contas fixas e compras conjuntas importadas do cartão. O orçamento de
+// categoria (ex. "Mercado: R$ 1.000") é uma meta pra acompanhar o gasto,
+// não é um valor já gasto ou já comprometido, então não entra na divisão.
 export function buildCommitments(state) {
-  const mercado = state.cats.find((c) => c.id === 'mercado');
   const commitments = state.bills.map((b) => ({
     id: `bill-${b.id}`,
     name: b.name,
@@ -15,10 +16,6 @@ export function buildCommitments(state) {
   (state.sharedPurchases || []).forEach((p) => {
     commitments.push({ id: `shared-${p.id}`, name: p.name, value: p.value });
   });
-
-  if (mercado) {
-    commitments.push({ id: 'mercado', name: 'Mercado', value: mercado.budget });
-  }
 
   return commitments;
 }
