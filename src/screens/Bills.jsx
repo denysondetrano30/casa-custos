@@ -379,7 +379,7 @@ function EstesMes({
   );
 }
 
-function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment }) {
+function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment, cats = [] }) {
   const [selecionado, setSelecionado] = useState(0);
   const meses = buildFutureMonths(state, simulacao);
   const maxTotal = Math.max(...meses.map((m) => m.total), 1);
@@ -440,7 +440,8 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment })
         </div>
         <div style={{ fontSize: 12, color: color.textMedium }}>Contas fixas do mês: {brl(mes.totalContasFixas)}</div>
         <div style={{ fontSize: 12, color: color.textMedium }}>
-          Parcelas em aberto: {brl(mes.total - mes.totalContasFixas - mes.totalSimulacao)}
+          {mes.k === 0 ? 'Compras no cartão deste mês' : 'Parcelas em aberto'}:{' '}
+          {brl(mes.total - mes.totalContasFixas - mes.totalSimulacao)}
         </div>
         {mes.totalSimulacao > 0 && (
           <div style={{ fontSize: 12, color: color.accentLight, marginTop: 4 }}>
@@ -473,46 +474,83 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment })
         </>
       )}
 
-      <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 8 }}>Parcelas deste mês</div>
-      {mes.parcelasAtivas.length === 0 ? (
-        <div style={{ fontSize: 13, color: color.textWeak }}>Nenhuma parcela ativa neste mês.</div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {mes.parcelasAtivas.map((p) => (
-            <div
-              key={p.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
-                background: color.surface,
-                borderRadius: radius.row,
-                padding: '10px 12px',
-                fontSize: 13.5,
-              }}
-            >
-              <span style={{ minWidth: 0 }}>
-                {p.name} <span style={{ color: color.textWeak, fontSize: 11.5 }}>· parcela {p.parcelaAtual} de {p.count}</span>
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{brl(p.value)}</span>
-                {onDeleteInstallment && (
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Apagar todas as parcelas de "${p.name}"? Isso remove de todos os meses futuros.`))
-                        onDeleteInstallment(p.id);
-                    }}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
-                    aria-label={`Apagar parcelas de ${p.name}`}
-                  >
-                    <Trash size={14} color={color.textWeak} />
-                  </button>
-                )}
-              </div>
+      {mes.k === 0 ? (
+        <>
+          <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 8 }}>Compras no cartão deste mês</div>
+          {(state.sharedPurchases || []).length === 0 ? (
+            <div style={{ fontSize: 13, color: color.textWeak }}>Nenhuma compra lançada neste mês ainda.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(state.sharedPurchases || []).map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    background: color.surface,
+                    borderRadius: radius.row,
+                    padding: '10px 12px',
+                    fontSize: 13.5,
+                  }}
+                >
+                  <span style={{ minWidth: 0 }}>
+                    {p.name}{' '}
+                    <span style={{ color: color.textWeak, fontSize: 11.5 }}>
+                      · {p.category ? cats.find((c) => c.id === p.category)?.name || p.category : 'sem categoria'}
+                    </span>
+                  </span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{brl(p.value)}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 8 }}>Parcelas deste mês</div>
+          {mes.parcelasAtivas.length === 0 ? (
+            <div style={{ fontSize: 13, color: color.textWeak }}>Nenhuma parcela ativa neste mês.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {mes.parcelasAtivas.map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    background: color.surface,
+                    borderRadius: radius.row,
+                    padding: '10px 12px',
+                    fontSize: 13.5,
+                  }}
+                >
+                  <span style={{ minWidth: 0 }}>
+                    {p.name} <span style={{ color: color.textWeak, fontSize: 11.5 }}>· parcela {p.parcelaAtual} de {p.count}</span>
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{brl(p.value)}</span>
+                    {onDeleteInstallment && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Apagar todas as parcelas de "${p.name}"? Isso remove de todos os meses futuros.`))
+                            onDeleteInstallment(p.id);
+                        }}
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                        aria-label={`Apagar parcelas de ${p.name}`}
+                      >
+                        <Trash size={14} color={color.textWeak} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </>
   );
@@ -808,7 +846,7 @@ export default function Bills({
 
       {view === 'futuro' && (
         <>
-          <MesesFuturos state={state} rendaFixaCasal={rendaFixaCasal} simulacao={simulacao} onDeleteInstallment={onDeleteInstallment} />
+          <MesesFuturos state={state} rendaFixaCasal={rendaFixaCasal} simulacao={simulacao} onDeleteInstallment={onDeleteInstallment} cats={state.cats} />
           <div style={{ marginTop: 20 }}>
             <Simulador
               onLancar={(sim) => {

@@ -6,6 +6,13 @@
 export function buildFutureMonths(state, simulacao) {
   const contasFixas = state.bills || [];
   const totalContasFixas = contasFixas.reduce((s, b) => s + b.value, 0);
+  // Fatura real do mês atual: já sabemos exatamente o que caiu no cartão
+  // (compras avulsas + parceladas), igual à fatura do banco — é a mesma
+  // conta que aparece em "Este mês". Não dá pra saber isso pros meses
+  // futuros (só sabemos as parcelas já compromissadas), mas pro mês atual
+  // (k=0) não faz sentido estimar por parcela quando já temos o valor
+  // real.
+  const totalComprasEsteMes = (state.sharedPurchases || []).reduce((s, p) => s + p.value, 0);
   const months = [];
 
   for (let k = 0; k < 6; k++) {
@@ -22,13 +29,18 @@ export function buildFutureMonths(state, simulacao) {
     const totalParcelas = parcelasAtivas.reduce((s, p) => s + p.value, 0);
     const totalSimulacao = simulacao && simulacao.parcelas > k ? simulacao.per : 0;
 
+    const total = k === 0
+      ? totalContasFixas + totalComprasEsteMes + totalSimulacao
+      : totalContasFixas + totalParcelas + totalSimulacao;
+
     months.push({
       k,
       parcelasAtivas,
       contasFixas,
       totalContasFixas,
+      totalComprasEsteMes: k === 0 ? totalComprasEsteMes : null,
       totalSimulacao,
-      total: totalContasFixas + totalParcelas + totalSimulacao,
+      total,
     });
   }
 
