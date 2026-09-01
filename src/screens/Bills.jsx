@@ -124,22 +124,20 @@ function EstesMes({
           marginBottom: 22,
         }}
       >
-        <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 6 }}>
-          {saldo < 0 ? 'Faltam para fechar o mês' : 'Saldo previsto dia 31'}
-        </div>
+        <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 6 }}>Total gasto este mês</div>
         <div
           style={{
             fontSize: 28,
             fontWeight: 500,
             letterSpacing: '-.025em',
             fontVariantNumeric: 'tabular-nums',
-            color: saldo < 0 ? color.alertText : color.text,
+            color: color.text,
           }}
         >
-          {brl(saldo)}
+          {brl(totalContas + totalCompras)}
         </div>
-        <div style={{ fontSize: 12, color: color.textMedium, marginTop: 8 }}>
-          Total gasto: {brl(totalContas + totalCompras)} de {brl(rendaCasal)} de renda
+        <div style={{ fontSize: 12, color: saldo < 0 ? color.alertText : color.textMedium, marginTop: 8 }}>
+          {saldo < 0 ? 'Faltam para fechar o mês' : 'Sobra'}: {brl(saldo)} (de {brl(rendaCasal)} de renda)
         </div>
         {rendaCasal > 0 && (
           <div style={{ fontSize: 12, color: pctComprometido >= 100 ? color.alertText : color.textMedium }}>

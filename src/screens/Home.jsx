@@ -48,11 +48,14 @@ function HeroCard({ month, gastoTotal, rendaCasal }) {
         {month.status}
       </div>
 
-      <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 4 }}>Sobra do mês</div>
+      <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 4 }}>Gasto do mês</div>
       <div style={{ fontSize: 40, fontWeight: 500, letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums' }}>
-        {brl(restante)}
+        {brl(gastoTotal)}
       </div>
-      <div style={{ fontSize: 12.5, color: pctGasto >= 100 ? color.alertText : color.accentLight, marginTop: 4 }}>
+      <div style={{ fontSize: 12.5, color: color.textMedium, marginTop: 4 }}>
+        Sobra {brl(restante)}
+      </div>
+      <div style={{ fontSize: 12.5, color: pctGasto >= 100 ? color.alertText : color.accentLight, marginTop: 2 }}>
         {pctGasto.toFixed(0)}% da renda do casal já está comprometida esse mês
       </div>
 
@@ -99,7 +102,7 @@ function HeroCard({ month, gastoTotal, rendaCasal }) {
       </div>
 
       <div style={{ fontSize: 12.5, color: color.textMedium, marginTop: 6 }}>
-        Gasto {brl(gastoTotal)} de {brl(rendaCasal)} de renda
+        Renda do casal esse mês: {brl(rendaCasal)}
       </div>
       <div style={{ fontSize: 12.5, color: color.textMedium }}>
         Pode gastar por dia {brl(porDia)}
