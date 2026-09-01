@@ -29,12 +29,26 @@ export default function Lock({ pins, onUnlock }) {
   const [erro, setErro] = useState(false);
   const [verificando, setVerificando] = useState(false);
 
-  async function conferir(novoPin) {
+  // Testa o que já foi digitado contra as duas senhas salvas. Como a gente
+  // só guarda o hash (nunca o tamanho da senha), não dá pra saber de cara
+  // se a pessoa tem PIN de 4, 5 ou 6 dígitos — então a gente confere a
+  // cada dígito novo, mas só avisa "senha incorreta" quando não sobrar
+  // mais nenhum dígito pra digitar (chegou em 6) ou quando a pessoa já
+  // digitou tudo que tinha pra digitar. Assim um PIN de 4 continua
+  // desbloqueando na hora, e um PIN de 6 não é acusado de errado no meio
+  // do caminho.
+  async function conferir(novoPin, ehUltimoDigitoPossivel) {
     setVerificando(true);
     const hash = await hashPin(novoPin);
     const ok = (pins?.Rui && hash === pins.Rui) || (pins?.Ana && hash === pins.Ana);
     if (ok) {
       onUnlock();
+      return;
+    }
+    if (!ehUltimoDigitoPossivel) {
+      // Ainda pode ser um PIN mais longo em digitação — não mostra erro
+      // ainda, só libera pra continuar digitando.
+      setVerificando(false);
       return;
     }
     setErro(true);
@@ -46,11 +60,11 @@ export default function Lock({ pins, onUnlock }) {
   }
 
   function digitar(d) {
-    if (verificando || pin.length >= 6) return;
+    if (verificando || pin.length >= TAMANHO_PIN) return;
     const novoPin = pin + d;
     setPin(novoPin);
     setErro(false);
-    if (novoPin.length >= 4) conferir(novoPin);
+    if (novoPin.length >= 4) conferir(novoPin, novoPin.length >= TAMANHO_PIN);
   }
 
   function apagar() {
