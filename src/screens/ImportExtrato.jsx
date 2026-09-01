@@ -16,6 +16,85 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
+// Formulário de lançamento manual — precisa viver FORA do componente
+// ImportExtrato. Se ele fosse definido dentro (como função interna), toda
+// vez que alguém digitasse uma letra o React entenderia que é um
+// componente "novo" (referência de função diferente a cada render) e
+// recriava o campo do zero, derrubando o foco — por isso a "janela
+// fechava" ao digitar a primeira letra.
+function ManualForm({ manual, onChangeManual, onAdicionar, compact }) {
+  const podeAdicionar = manual.desc.trim() && manual.value.trim();
+  return (
+    <div
+      style={{
+        background: color.surfaceInset,
+        borderRadius: radius.card,
+        padding: 14,
+        marginBottom: compact ? 20 : 18,
+      }}
+    >
+      <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 10 }}>
+        {compact ? '+ Lançar outra compra manualmente' : 'Ou lance as compras manualmente'}
+      </div>
+      {!compact && (
+        <div style={{ fontSize: 11, color: color.textWeak, marginBottom: 10, lineHeight: 1.5 }}>
+          Pra quando o banco (ex. Itaú) só exporta o PDF da fatura, não o CSV — digite cada compra olhando pro
+          extrato.
+        </div>
+      )}
+      <input
+        value={manual.desc}
+        onChange={(e) => onChangeManual({ ...manual, desc: e.target.value })}
+        placeholder="Nome da compra (ex. Farmácia São João)"
+        style={inputStyle}
+      />
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <input
+          value={manual.value}
+          onChange={(e) => onChangeManual({ ...manual, value: e.target.value })}
+          placeholder="Valor (ex. 45,90)"
+          inputMode="decimal"
+          style={{ ...inputStyle, flex: 1 }}
+        />
+        <input
+          value={manual.parcelaAtual}
+          onChange={(e) => onChangeManual({ ...manual, parcelaAtual: e.target.value })}
+          placeholder="Parcela nº"
+          inputMode="numeric"
+          style={{ ...inputStyle, width: 90 }}
+        />
+        <input
+          value={manual.parcelaTotal}
+          onChange={(e) => onChangeManual({ ...manual, parcelaTotal: e.target.value })}
+          placeholder="de quantas"
+          inputMode="numeric"
+          style={{ ...inputStyle, width: 90 }}
+        />
+      </div>
+      <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6, marginBottom: 10 }}>
+        Só preenche "Parcela nº" e "de quantas" se for uma compra parcelada (ex. 3 e 5, pra parcela 3 de 5).
+      </div>
+      <button
+        onClick={onAdicionar}
+        disabled={!podeAdicionar}
+        style={{
+          width: '100%',
+          padding: '11px 0',
+          borderRadius: radius.row,
+          border: `1px solid ${podeAdicionar ? color.accent : 'transparent'}`,
+          background: podeAdicionar ? color.accentSoft : 'transparent',
+          color: podeAdicionar ? color.accentLight : 'rgba(233,233,237,.35)',
+          fontSize: 13.5,
+          fontWeight: 500,
+          cursor: podeAdicionar ? 'pointer' : 'default',
+        }}
+      >
+        + Adicionar compra
+      </button>
+    </div>
+  );
+}
+
 function Chip({ active, children, onClick, small }) {
   return (
     <button
@@ -119,78 +198,6 @@ export default function ImportExtrato({ cats, cards = [], names, onClose, onConf
 
   const totalSelecionado = items ? items.filter((it) => it.classificacao !== 'ignorar').length : 0;
 
-  function ManualForm({ compact }) {
-    return (
-      <div
-        style={{
-          background: color.surfaceInset,
-          borderRadius: radius.card,
-          padding: 14,
-          marginBottom: compact ? 20 : 18,
-        }}
-      >
-        <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 10 }}>
-          {compact ? '+ Lançar outra compra manualmente' : 'Ou lance as compras manualmente'}
-        </div>
-        {!compact && (
-          <div style={{ fontSize: 11, color: color.textWeak, marginBottom: 10, lineHeight: 1.5 }}>
-            Pra quando o banco (ex. Itaú) só exporta o PDF da fatura, não o CSV — digite cada compra olhando pro
-            extrato.
-          </div>
-        )}
-        <input
-          value={manual.desc}
-          onChange={(e) => setManual((m) => ({ ...m, desc: e.target.value }))}
-          placeholder="Nome da compra (ex. Farmácia São João)"
-          style={inputStyle}
-        />
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <input
-            value={manual.value}
-            onChange={(e) => setManual((m) => ({ ...m, value: e.target.value }))}
-            placeholder="Valor (ex. 45,90)"
-            inputMode="decimal"
-            style={{ ...inputStyle, flex: 1 }}
-          />
-          <input
-            value={manual.parcelaAtual}
-            onChange={(e) => setManual((m) => ({ ...m, parcelaAtual: e.target.value }))}
-            placeholder="Parcela nº"
-            inputMode="numeric"
-            style={{ ...inputStyle, width: 90 }}
-          />
-          <input
-            value={manual.parcelaTotal}
-            onChange={(e) => setManual((m) => ({ ...m, parcelaTotal: e.target.value }))}
-            placeholder="de quantas"
-            inputMode="numeric"
-            style={{ ...inputStyle, width: 90 }}
-          />
-        </div>
-        <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6, marginBottom: 10 }}>
-          Só preenche "Parcela nº" e "de quantas" se for uma compra parcelada (ex. 3 e 5, pra parcela 3 de 5).
-        </div>
-        <button
-          onClick={adicionarManual}
-          disabled={!manual.desc.trim() || !manual.value.trim()}
-          style={{
-            width: '100%',
-            padding: '11px 0',
-            borderRadius: radius.row,
-            border: `1px solid ${manual.desc.trim() && manual.value.trim() ? color.accent : 'transparent'}`,
-            background: manual.desc.trim() && manual.value.trim() ? color.accentSoft : 'transparent',
-            color: manual.desc.trim() && manual.value.trim() ? color.accentLight : 'rgba(233,233,237,.35)',
-            fontSize: 13.5,
-            fontWeight: 500,
-            cursor: manual.desc.trim() && manual.value.trim() ? 'pointer' : 'default',
-          }}
-        >
-          + Adicionar compra
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div style={{ padding: '64px 20px 40px', minHeight: '100vh' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -274,7 +281,7 @@ export default function ImportExtrato({ cats, cards = [], names, onClose, onConf
             <div style={{ flex: 1, height: 1, background: color.border }} />
           </div>
 
-          <ManualForm />
+          <ManualForm manual={manual} onChangeManual={setManual} onAdicionar={adicionarManual} />
         </>
       )}
 
@@ -368,7 +375,7 @@ export default function ImportExtrato({ cats, cards = [], names, onClose, onConf
           </div>
 
           {mostrarManual ? (
-            <ManualForm compact />
+            <ManualForm manual={manual} onChangeManual={setManual} onAdicionar={adicionarManual} compact />
           ) : (
             <button
               onClick={() => setMostrarManual(true)}
