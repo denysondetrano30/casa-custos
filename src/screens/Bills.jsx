@@ -68,6 +68,7 @@ function EstesMes({
   const totalContas = bills.reduce((s, b) => s + b.value, 0);
   const totalCompras = sharedPurchases.reduce((s, p) => s + p.value, 0);
   const saldo = rendaCasal - totalContas - totalCompras;
+  const pctComprometido = rendaCasal > 0 ? ((totalContas + totalCompras) / rendaCasal) * 100 : 0;
 
   const porSemana = {};
   bills.forEach((b) => {
@@ -137,6 +138,14 @@ function EstesMes({
         >
           {brl(saldo)}
         </div>
+        <div style={{ fontSize: 12, color: color.textMedium, marginTop: 8 }}>
+          Total gasto: {brl(totalContas + totalCompras)} de {brl(rendaCasal)} de renda
+        </div>
+        {rendaCasal > 0 && (
+          <div style={{ fontSize: 12, color: pctComprometido >= 100 ? color.alertText : color.textMedium }}>
+            {pctComprometido.toFixed(0)}% da renda do casal já está comprometida esse mês
+          </div>
+        )}
       </div>
 
       {sharedPurchases.length > 0 && (

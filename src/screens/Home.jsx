@@ -52,6 +52,9 @@ function HeroCard({ month, gastoTotal, rendaCasal }) {
       <div style={{ fontSize: 40, fontWeight: 500, letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums' }}>
         {brl(restante)}
       </div>
+      <div style={{ fontSize: 12.5, color: pctGasto >= 100 ? color.alertText : color.accentLight, marginTop: 4 }}>
+        {pctGasto.toFixed(0)}% da renda do casal já está comprometida esse mês
+      </div>
 
       <div style={{ position: 'relative', marginTop: 18, marginBottom: 8 }}>
         <div
