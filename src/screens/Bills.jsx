@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { CheckCircle, Circle, PencilSimple, Trash } from '@phosphor-icons/react';
+import { CheckCircle, Circle, PencilSimple, Trash, Plus, CreditCard } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
 import { buildFutureMonths, monthLabel } from '../lib/futureBills';
+import { commitmentIdForSharedPurchase } from '../lib/commitments';
+import { buildCardUsage } from '../lib/cardLimits';
 import Historico from './Historico';
 
 function Segmented({ value, onChange, options }) {
@@ -34,7 +36,35 @@ function Segmented({ value, onChange, options }) {
   );
 }
 
-function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDeleteBill, onDeleteSharedPurchase, rendaCasal, mesAtualLabel, onFecharMes }) {
+// Descobre, no resultado da divisão, quem ficou responsável por um
+// compromisso (uma conta ou compra específica) e devolve um textinho tipo
+// "Rui" ou "Rui e Ana" (quando essa foi a única conta dividida no meio).
+function textoResponsavel(commitmentId, splitResult, names) {
+  if (!splitResult) return null;
+  const partes = [];
+  for (const pessoa of ['Rui', 'Ana']) {
+    const item = (splitResult[pessoa] || []).find((i) => i.id === commitmentId);
+    if (item) partes.push(names[pessoa] || pessoa);
+  }
+  return partes.length ? partes.join(' e ') : null;
+}
+
+function EstesMes({
+  bills,
+  sharedPurchases = [],
+  onEditBill,
+  onDeleteBill,
+  onDeleteSharedPurchase,
+  onEditSharedPurchaseCategory,
+  onToggleSharedPurchasePaid,
+  cats = [],
+  rendaCasal,
+  mesAtualLabel,
+  onFecharMes,
+  hoje,
+  splitResult,
+  names = { Rui: 'Rui', Ana: 'Ana' },
+}) {
   const totalContas = bills.reduce((s, b) => s + b.value, 0);
   const totalCompras = sharedPurchases.reduce((s, p) => s + p.value, 0);
   const saldo = rendaCasal - totalContas - totalCompras;
@@ -46,8 +76,45 @@ function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDel
     porSemana[semana].push(b);
   });
 
+  // Contas fixas com vencimento hoje ou já passado que ainda não foram
+  // marcadas como pagas — é o aviso "olha, isso ainda precisa ser pago".
+  const vencidas = hoje ? bills.filter((b) => !b.paid && (b.due || 1) <= hoje) : [];
+
+  // O marcar como pago das contas fixas continua vivendo no Perfil de cada
+  // pessoa. Já a compra de cartão pode ser marcada aqui mesmo, direto na
+  // lista detalhada — e, diferente da conta fixa, assim que ela é marcada
+  // como paga ela sai do valor dividido (porque já foi resolvida entre
+  // vocês de outro jeito, não faz sentido continuar "devendo" ela).
+  const pendentes = [
+    ...bills.filter((b) => !b.paid).map((b) => ({ id: `bill-${b.id}`, name: b.name, value: b.value })),
+    ...sharedPurchases
+      .filter((p) => !p.paid)
+      .map((p) => ({ id: commitmentIdForSharedPurchase(p), name: p.name, value: p.value })),
+  ];
+
   return (
     <>
+      {vencidas.length > 0 && (
+        <div
+          style={{
+            borderRadius: radius.card,
+            padding: 14,
+            background: 'rgba(201,138,138,.12)',
+            border: `1px solid ${color.alertBar}`,
+            marginBottom: 18,
+          }}
+        >
+          <div style={{ fontSize: 12.5, color: color.alertText, fontWeight: 500, marginBottom: 6 }}>
+            {vencidas.length === 1 ? 'Uma conta está vencendo ou já venceu' : `${vencidas.length} contas estão vencendo ou já venceram`}
+          </div>
+          {vencidas.map((b) => (
+            <div key={b.id} style={{ fontSize: 12, color: color.alertText, lineHeight: 1.6 }}>
+              {b.name} · dia {b.due} · {brl(b.value)} — ainda precisa guardar esse valor pra pagar
+            </div>
+          ))}
+        </div>
+      )}
+
       <div
         style={{
           borderRadius: radius.card,
@@ -81,6 +148,7 @@ function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDel
             {sharedPurchases.map((p) => (
               <div
                 key={p.id}
+                onClick={() => onToggleSharedPurchasePaid && onToggleSharedPurchasePaid(p.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -88,12 +156,57 @@ function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDel
                   background: color.surface,
                   borderRadius: radius.row,
                   padding: '11px 12px',
+                  cursor: onToggleSharedPurchasePaid ? 'pointer' : 'default',
                 }}
               >
-                <span style={{ flex: 1, fontSize: 14, color: color.text }}>{p.name}</span>
-                <span style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{brl(p.value)}</span>
+                {p.paid ? (
+                  <CheckCircle size={18} weight="fill" color={color.accentIcon} />
+                ) : (
+                  <Circle size={18} color={color.textWeak} />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      color: p.paid ? color.textWeak : color.text,
+                      textDecoration: p.paid ? 'line-through' : 'none',
+                    }}
+                  >
+                    {p.name}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: color.textWeak }}>
+                    {p.category ? cats.find((c) => c.id === p.category)?.name || p.category : 'sem categoria'}
+                  </div>
+                </div>
+                <span style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums', color: p.paid ? color.textWeak : color.text }}>
+                  {brl(p.value)}
+                </span>
+                {onEditSharedPurchaseCategory && cats.length > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const opcoes = cats.map((c) => c.name).join(', ');
+                      const resposta = window.prompt(
+                        `Categoria de "${p.name}" (opções: ${opcoes}). Deixe em branco pra tirar a categoria.`,
+                        cats.find((c) => c.id === p.category)?.name || ''
+                      );
+                      if (resposta === null) return;
+                      const escolhida = cats.find((c) => c.name.toLowerCase() === resposta.trim().toLowerCase());
+                      if (resposta.trim() && !escolhida) {
+                        window.alert(`Não achei essa categoria. Escolha uma entre: ${opcoes}.`);
+                        return;
+                      }
+                      onEditSharedPurchaseCategory(p.id, escolhida ? escolhida.id : null);
+                    }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                    aria-label={`Editar categoria de ${p.name}`}
+                  >
+                    <PencilSimple size={14} color={color.textWeak} />
+                  </button>
+                )}
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     if (window.confirm(`Apagar "${p.name}" das compras conjuntas?`)) onDeleteSharedPurchase(p.id);
                   }}
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
@@ -105,7 +218,9 @@ function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDel
             ))}
           </div>
           <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6 }}>
-            Essas compras vêm do extrato importado, entram na divisão de quem paga o quê e já contam no saldo acima.
+            Essas compras vêm do extrato importado e sempre contam no saldo acima. Toque numa pra marcar como paga —
+            aí ela sai do valor dividido na Divisão e no Perfil, porque já foi resolvida de outro jeito. Na Divisão,
+            as de Mercado entram separadas; as outras juntam numa fatura só.
           </div>
         </div>
       )}
@@ -125,7 +240,6 @@ function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDel
               {porSemana[semana].map((b) => (
                 <div
                   key={b.id}
-                  onClick={() => onTogglePaid(b.id)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -133,7 +247,6 @@ function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDel
                     background: color.surface,
                     borderRadius: radius.row,
                     padding: '11px 12px',
-                    cursor: 'pointer',
                   }}
                 >
                   {b.paid ? (
@@ -191,13 +304,56 @@ function EstesMes({ bills, sharedPurchases = [], onTogglePaid, onEditBill, onDel
           </div>
         ))}
 
+      {pendentes.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 8 }}>
+            Ainda pendente este mês ({brl(pendentes.reduce((s, i) => s + i.value, 0))})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pendentes.map((item) => {
+              const responsavel = textoResponsavel(item.id, splitResult, names);
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: color.surfaceInset,
+                    borderRadius: radius.row,
+                    padding: '10px 12px',
+                    fontSize: 13,
+                  }}
+                >
+                  <div>
+                    <div>{item.name}</div>
+                    {responsavel && (
+                      <div style={{ fontSize: 11, color: color.textWeak, marginTop: 2 }}>
+                        fica com {responsavel}
+                      </div>
+                    )}
+                  </div>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{brl(item.value)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {onFecharMes && (
         <div style={{ marginTop: 26, borderTop: `1px solid ${color.borderSubtle}`, paddingTop: 18 }}>
           <button
             onClick={() => {
+              const avisoPendentes =
+                pendentes.length > 0
+                  ? `\n\nAtenção: ainda tem ${pendentes.length} ${pendentes.length === 1 ? 'pendência' : 'pendências'} não marcada(s) como paga(s), totalizando ${brl(
+                      pendentes.reduce((s, i) => s + i.value, 0)
+                    )}. Isso vai ficar registrado no Histórico, mas some da tela deste mês.`
+                  : '';
               if (
                 window.confirm(
-                  `Fechar ${mesAtualLabel} e começar o mês seguinte?\n\nIsso guarda um resumo de ${mesAtualLabel} no Histórico e zera os gastos, compras de cartão e gastos pessoais variáveis pro mês novo. Contas fixas, parcelas e metas continuam do jeito que estão.`
+                  `Fechar ${mesAtualLabel} e começar o mês seguinte?\n\nIsso guarda um resumo de ${mesAtualLabel} no Histórico e zera os gastos, compras de cartão e gastos pessoais variáveis pro mês novo. Contas fixas, parcelas e metas continuam do jeito que estão.${avisoPendentes}`
                 )
               ) {
                 onFecharMes();
@@ -362,6 +518,130 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment })
   );
 }
 
+// Cartões de crédito cadastrados, com quanto do limite já está
+// comprometido — a fatura deste mês mais as parcelas que ainda vão cair
+// nele nos próximos meses. É só informativo: não muda orçamento, divisão
+// nem o alerta de 42% da renda, só ajuda a não precisar abrir o app do
+// banco pra saber quanto ainda sobra de limite.
+function Cartoes({ state, onAddCard, onEditCard, onDeleteCard }) {
+  const cards = state.cards || [];
+
+  function novoCartao() {
+    const nome = window.prompt('Nome do cartão (ex. Nubank):');
+    if (nome === null || !nome.trim()) return;
+    const limiteStr = window.prompt('Limite total desse cartão (só números, ex. 1900):');
+    if (limiteStr === null) return;
+    const limite = Number(String(limiteStr).replace(',', '.'));
+    if (Number.isNaN(limite) || limite <= 0) {
+      window.alert('Isso não parece um valor válido.');
+      return;
+    }
+    onAddCard(nome.trim(), limite);
+  }
+
+  function editarCartao(card) {
+    const nome = window.prompt('Nome do cartão:', card.name);
+    if (nome === null || !nome.trim()) return;
+    const limiteStr = window.prompt('Limite total (só números):', card.limit);
+    if (limiteStr === null) return;
+    const limite = Number(String(limiteStr).replace(',', '.'));
+    if (Number.isNaN(limite) || limite <= 0) {
+      window.alert('Isso não parece um valor válido.');
+      return;
+    }
+    onEditCard(card.id, { name: nome.trim(), limit: limite });
+  }
+
+  return (
+    <>
+      {cards.length === 0 ? (
+        <div style={{ fontSize: 13, color: color.textWeak, marginBottom: 16 }}>
+          Nenhum cartão cadastrado ainda. Cadastre pra acompanhar o limite disponível de cada um, sem precisar abrir o
+          app do banco.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18 }}>
+          {cards.map((card) => {
+            const uso = buildCardUsage(state, card.id);
+            const disponivel = card.limit - uso.comprometido;
+            const pct = card.limit > 0 ? Math.min(100, (uso.comprometido / card.limit) * 100) : 0;
+            const estourou = uso.comprometido > card.limit;
+            return (
+              <div key={card.id} style={{ borderRadius: radius.card, padding: 16, background: color.surfaceInset }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <CreditCard size={17} color={color.accentIcon} />
+                    <span style={{ fontSize: 15, fontWeight: 500 }}>{card.name}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={() => editarCartao(card)}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                      aria-label={`Editar ${card.name}`}
+                    >
+                      <PencilSimple size={14} color={color.textWeak} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Apagar o cartão "${card.name}"? As compras já lançadas continuam, só deixam de ter cartão identificado.`))
+                          onDeleteCard(card.id);
+                      }}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                      aria-label={`Apagar ${card.name}`}
+                    >
+                      <Trash size={14} color={color.textWeak} />
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ height: 6, borderRadius: 99, background: color.borderSubtle, overflow: 'hidden', marginBottom: 8 }}>
+                  <div
+                    style={{
+                      width: `${pct}%`,
+                      height: '100%',
+                      background: estourou ? color.alertBar : `linear-gradient(90deg, ${color.chart[2]}, ${color.accent})`,
+                    }}
+                  />
+                </div>
+
+                <div style={{ fontSize: 12.5, color: estourou ? color.alertText : color.textMedium, marginBottom: 2 }}>
+                  {brl(uso.comprometido)} comprometido de {brl(card.limit)}
+                </div>
+                <div style={{ fontSize: 12.5, color: estourou ? color.alertText : color.text, fontWeight: 500 }}>
+                  {disponivel >= 0 ? `${brl(disponivel)} disponível` : `${brl(Math.abs(disponivel))} acima do limite`}
+                </div>
+                <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6 }}>
+                  {brl(uso.faturaDesteMes)} na fatura deste mês + {brl(uso.futuroComprometido)} em parcelas dos próximos meses
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <button
+        onClick={novoCartao}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          padding: '11px 0',
+          borderRadius: radius.row,
+          border: `1px solid ${color.border}`,
+          background: 'transparent',
+          color: color.textMedium,
+          fontSize: 13.5,
+          cursor: 'pointer',
+        }}
+      >
+        <Plus size={14} /> Novo cartão
+      </button>
+    </>
+  );
+}
+
 const PARCELAS_OPCOES = [1, 2, 3, 6, 10, 12, 18];
 
 function Simulador({ onLancar }) {
@@ -465,7 +745,24 @@ function Simulador({ onLancar }) {
   );
 }
 
-export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, onDeleteSharedPurchase, onLancarInstallment, onDeleteInstallment, onFecharMes, rendaCasal, rendaFixaCasal }) {
+export default function Bills({
+  state,
+  onEditBill,
+  onDeleteBill,
+  onDeleteSharedPurchase,
+  onEditSharedPurchaseCategory,
+  onToggleSharedPurchasePaid,
+  onLancarInstallment,
+  onDeleteInstallment,
+  onFecharMes,
+  rendaCasal,
+  rendaFixaCasal,
+  splitResult,
+  names,
+  onAddCard,
+  onEditCard,
+  onDeleteCard,
+}) {
   const [view, setView] = useState('mes');
   const [simulacao, setSimulacao] = useState(null);
 
@@ -479,6 +776,7 @@ export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, o
         options={[
           { id: 'mes', label: 'Este mês' },
           { id: 'futuro', label: 'Meses futuros' },
+          { id: 'cartoes', label: 'Cartões' },
           { id: 'historico', label: 'Histórico' },
         ]}
       />
@@ -487,17 +785,26 @@ export default function Bills({ state, onTogglePaid, onEditBill, onDeleteBill, o
         <EstesMes
           bills={state.bills}
           sharedPurchases={state.sharedPurchases || []}
-          onTogglePaid={onTogglePaid}
           onEditBill={onEditBill}
           onDeleteBill={onDeleteBill}
           onDeleteSharedPurchase={onDeleteSharedPurchase}
+          onEditSharedPurchaseCategory={onEditSharedPurchaseCategory}
+          onToggleSharedPurchasePaid={onToggleSharedPurchasePaid}
+          cats={state.cats}
           rendaCasal={rendaCasal}
           mesAtualLabel={state.month.label}
           onFecharMes={onFecharMes}
+          hoje={state.month.today}
+          splitResult={splitResult}
+          names={names}
         />
       )}
 
-      {view === 'historico' && <Historico historico={state.historico || []} />}
+      {view === 'cartoes' && (
+        <Cartoes state={state} onAddCard={onAddCard} onEditCard={onEditCard} onDeleteCard={onDeleteCard} />
+      )}
+
+      {view === 'historico' && <Historico historico={state.historico || []} names={names} />}
 
       {view === 'futuro' && (
         <>

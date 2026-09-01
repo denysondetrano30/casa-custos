@@ -424,6 +424,32 @@ export default function App() {
     setState((prev) => ({ ...prev, pins: { ...(prev.pins || {}), [pessoa]: null } }));
   }
 
+  // Cadastro de cartões (nome + limite) — só informativo, ver lib/cardLimits.js.
+  function addCard(nome, limite) {
+    setState((prev) => ({
+      ...prev,
+      cards: [...(prev.cards || []), { id: `c${Date.now()}`, name: nome, limit: limite }],
+    }));
+  }
+
+  function editCard(id, dados) {
+    setState((prev) => ({
+      ...prev,
+      cards: (prev.cards || []).map((c) => (c.id === id ? { ...c, ...dados } : c)),
+    }));
+  }
+
+  function deleteCard(id) {
+    setState((prev) => ({
+      ...prev,
+      cards: (prev.cards || []).filter((c) => c.id !== id),
+      // As compras/parcelas que estavam nesse cartão não são apagadas —
+      // só voltam a ficar sem cartão identificado (fatura geral).
+      sharedPurchases: (prev.sharedPurchases || []).map((p) => (p.cardId === id ? { ...p, cardId: null } : p)),
+      installments: (prev.installments || []).map((i) => (i.cardId === id ? { ...i, cardId: null } : i)),
+    }));
+  }
+
   function updateName(pessoa, nome) {
     setState((prev) => ({ ...prev, names: { ...prev.names, [pessoa]: nome } }));
   }
@@ -472,6 +498,7 @@ export default function App() {
               per: it.value,
               count: it.parcelaTotal,
               done: Math.max(0, (it.parcelaAtual || 1) - 1),
+              cardId: it.cardId || null,
             },
           ];
         }
@@ -483,6 +510,8 @@ export default function App() {
             name: it.desc + (it.parcelaTotal ? ` · Parcela ${it.parcelaAtual}/${it.parcelaTotal}` : ''),
             value: it.value,
             category: it.category || null,
+            cardId: it.cardId || null,
+            paid: false,
           },
         ];
       }
@@ -491,10 +520,40 @@ export default function App() {
     });
   }
 
+  // Corrige a categoria de uma compra conjunta depois de importada — útil
+  // pra arrumar um "chute" errado da importação (ex. algo que caiu em
+  // Mercado sem ser mercado de verdade).
+  function editSharedPurchaseCategory(id, category) {
+    setState((prev) => ({
+      ...prev,
+      sharedPurchases: (prev.sharedPurchases || []).map((p) => (p.id === id ? { ...p, category } : p)),
+    }));
+  }
+
   function deleteSharedPurchase(id) {
     setState((prev) => ({
       ...prev,
       sharedPurchases: (prev.sharedPurchases || []).filter((p) => p.id !== id),
+    }));
+  }
+
+  // Marca uma compra conjunta (importada do extrato) como paga/quitada entre
+  // vocês dois — é só um status de acompanhamento, não muda o valor que já
+  // foi dividido no mês (igual o "paid" das contas fixas).
+  function toggleSharedPurchasePaid(id) {
+    setState((prev) => ({
+      ...prev,
+      sharedPurchases: (prev.sharedPurchases || []).map((p) => (p.id === id ? { ...p, paid: !p.paid } : p)),
+    }));
+  }
+
+  // Marca de uma vez várias compras (todas as de uma fatura de cartão
+  // agrupada) como pagas ou não — porque a fatura é paga numa cobrança só,
+  // não compra por compra.
+  function setSharedPurchasesPaidBulk(ids, paid) {
+    setState((prev) => ({
+      ...prev,
+      sharedPurchases: (prev.sharedPurchases || []).map((p) => (ids.includes(p.id) ? { ...p, paid } : p)),
     }));
   }
 
@@ -536,7 +595,12 @@ export default function App() {
   // parcelas, metas e contas pessoais fixas continuam do jeito que estão.
   function fecharMes() {
     setState((prev) => {
-      const snapshot = buildSnapshot(prev);
+      // Recalcula a divisão em cima do estado mais atual (não do `splitResult`
+      // de fora, que pode já estar um passo desatualizado) só pra saber quem
+      // ficou responsável por cada pendência que sobrou pro histórico.
+      const commitmentsAtuais = buildCommitments(prev);
+      const splitAtual = splitBills(commitmentsAtuais, prev.splitPct.Rui, ['Rui', 'Ana']);
+      const snapshot = buildSnapshot(prev, splitAtual);
       return resetForNextMonth(prev, snapshot);
     });
   }
@@ -620,15 +684,21 @@ export default function App() {
     bills: () => (
       <Bills
         state={state}
-        onTogglePaid={togglePaid}
         onEditBill={editBill}
         onDeleteBill={deleteBill}
         onDeleteSharedPurchase={deleteSharedPurchase}
+        onEditSharedPurchaseCategory={editSharedPurchaseCategory}
+        onToggleSharedPurchasePaid={toggleSharedPurchasePaid}
         onLancarInstallment={lancarInstallment}
         onDeleteInstallment={deleteInstallment}
         onFecharMes={fecharMes}
         rendaCasal={rendaCasal}
         rendaFixaCasal={rendaCasal}
+        splitResult={splitResult}
+        names={names}
+        onAddCard={addCard}
+        onEditCard={editCard}
+        onDeleteCard={deleteCard}
       />
     ),
     split: () => (
@@ -677,6 +747,11 @@ export default function App() {
         pins={state.pins}
         onSetPin={setPinPessoa}
         onRemovePin={removePinPessoa}
+        bills={state.bills}
+        sharedPurchases={state.sharedPurchases}
+        onTogglePaid={togglePaid}
+        onToggleSharedPurchasePaid={toggleSharedPurchasePaid}
+        onSetGroupPaid={setSharedPurchasesPaidBulk}
       />
     ),
   };
@@ -697,6 +772,7 @@ export default function App() {
       ) : importing ? (
         <ImportExtrato
           cats={state.cats}
+          cards={state.cards || []}
           names={names}
           onClose={() => setImporting(false)}
           onConfirm={(items) => {

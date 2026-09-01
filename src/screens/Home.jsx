@@ -109,6 +109,32 @@ function HeroCard({ month, gastoTotal, rendaCasal }) {
   );
 }
 
+function AvisoContasVencendo({ bills, hoje }) {
+  const vencidas = bills.filter((b) => !b.paid && (b.due || 1) <= hoje);
+  if (vencidas.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        borderRadius: radius.card,
+        padding: 14,
+        background: 'rgba(201,138,138,.12)',
+        border: `1px solid ${color.alertBar}`,
+        marginBottom: 20,
+      }}
+    >
+      <div style={{ fontSize: 12.5, color: color.alertText, fontWeight: 500, marginBottom: 6 }}>
+        {vencidas.length === 1 ? 'Uma conta está vencendo ou já venceu' : `${vencidas.length} contas estão vencendo ou já venceram`}
+      </div>
+      {vencidas.map((b) => (
+        <div key={b.id} style={{ fontSize: 12, color: color.alertText, lineHeight: 1.6 }}>
+          {b.name} · dia {b.due} · {brl(b.value)} — ainda não foi marcada como paga em Contas
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CategoriesSection({ cats, bills = [], sharedPurchases = [], onEditBudget }) {
   return (
     <div style={{ marginBottom: 20 }}>
@@ -300,6 +326,7 @@ export default function Home({ month, cats, txs, onEditCategoryBudget, rendaCasa
       </div>
 
       <HeroCard month={month} gastoTotal={gastoTotal} rendaCasal={rendaCasal} />
+      <AvisoContasVencendo bills={bills} hoje={month.today} />
       <CategoriesSection cats={cats} bills={bills} sharedPurchases={sharedPurchases} onEditBudget={handleEditBudget} />
       <ImportCard onClick={onImport} />
       <RecentTransactions txs={txs} onDeleteTx={onDeleteTx} />

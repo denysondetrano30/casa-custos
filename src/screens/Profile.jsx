@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, PencilSimple, Trash } from '@phosphor-icons/react';
+import { X, Plus, PencilSimple, Trash, CheckCircle, Circle } from '@phosphor-icons/react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { color, radius } from '../lib/tokens';
@@ -121,6 +121,122 @@ function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Acha, a partir do id que o algoritmo de divisão dá a cada item
+// ("bill-123", "shared-456"), o registro original (conta fixa ou compra
+// conjunta) — é dele que vem o status "pago", que não existe no resultado
+// da divisão em si.
+function resolverPagamento(itemId, bills, sharedPurchases) {
+  if (typeof itemId !== 'string') return null;
+  if (itemId.startsWith('bill-')) {
+    const id = Number(itemId.slice('bill-'.length));
+    const b = (bills || []).find((x) => x.id === id);
+    return b ? { paid: !!b.paid, tipo: 'bill', realId: b.id } : null;
+  }
+  if (itemId.startsWith('shared-')) {
+    const id = Number(itemId.slice('shared-'.length));
+    const p = (sharedPurchases || []).find((x) => x.id === id);
+    return p ? { paid: !!p.paid, tipo: 'shared', realId: p.id } : null;
+  }
+  // "cartao-<chave>" é uma fatura que junta várias compras (todas menos as
+  // de Mercado) numa linha só — marcar como paga aqui marca todas de uma
+  // vez, porque é assim que ela é paga de verdade: numa cobrança só.
+  if (itemId.startsWith('cartao-')) {
+    const chave = itemId.slice('cartao-'.length);
+    const itens = (sharedPurchases || []).filter(
+      (p) => p.category !== 'mercado' && (p.cardId || '_geral') === chave
+    );
+    if (itens.length === 0) return null;
+    return { paid: itens.every((p) => p.paid), tipo: 'cartaoGroup', ids: itens.map((p) => p.id), qtd: itens.length };
+  }
+  return null;
+}
+
+// A parte de contas de casa que ficou com esta pessoa, segundo a divisão —
+// aqui é onde cada um marca o que já pagou. É pessoal: cada um cuida da
+// própria lista, sem misturar com a do outro (diferente da tela Contas,
+// que é o histórico compartilhado dos dois).
+function ContasCasaLista({ itens, bills, sharedPurchases, onTogglePaid, onToggleSharedPurchasePaid, onSetGroupPaid }) {
+  const total = itens.reduce((s, i) => s + i.part, 0);
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 12.5, color: color.textMedium }}>Parte das contas de casa</span>
+        <span style={{ fontSize: 12.5, color: color.textMedium }}>{brl(total)}</span>
+      </div>
+      {itens.length === 0 ? (
+        <div style={{ fontSize: 13, color: color.textWeak }}>Nenhuma conta ainda.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {itens.map((item, idx) => {
+            const pagamento = resolverPagamento(item.id, bills, sharedPurchases);
+            const podeMarcar = pagamento && (onTogglePaid || onToggleSharedPurchasePaid || onSetGroupPaid);
+            return (
+              <div
+                key={item.id ?? idx}
+                onClick={() => {
+                  if (!pagamento) return;
+                  if (pagamento.tipo === 'bill' && onTogglePaid) onTogglePaid(pagamento.realId);
+                  if (pagamento.tipo === 'shared' && onToggleSharedPurchasePaid) onToggleSharedPurchasePaid(pagamento.realId);
+                  if (pagamento.tipo === 'cartaoGroup' && onSetGroupPaid) onSetGroupPaid(pagamento.ids, !pagamento.paid);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  background: color.surface,
+                  borderRadius: radius.row,
+                  padding: '10px 12px',
+                  fontSize: 13.5,
+                  cursor: podeMarcar ? 'pointer' : 'default',
+                }}
+              >
+                {podeMarcar &&
+                  (pagamento.paid ? (
+                    <CheckCircle size={17} weight="fill" color={color.accentIcon} />
+                  ) : (
+                    <Circle size={17} color={color.textWeak} />
+                  ))}
+                <span
+                  style={{
+                    flex: 1,
+                    color: pagamento?.paid ? color.textWeak : color.text,
+                    textDecoration: pagamento?.paid ? 'line-through' : 'none',
+                  }}
+                >
+                  {item.name}
+                  {item.shared && (
+                    <span style={{ fontSize: 10, color: color.textWeak }}> · dividida</span>
+                  )}
+                  {pagamento?.tipo === 'cartaoGroup' && (
+                    <span style={{ fontSize: 10, color: color.textWeak }}>
+                      {' '}
+                      · {pagamento.qtd} {pagamento.qtd === 1 ? 'compra' : 'compras'}
+                    </span>
+                  )}
+                </span>
+                <span
+                  style={{
+                    fontVariantNumeric: 'tabular-nums',
+                    color: pagamento?.paid ? color.textWeak : color.text,
+                  }}
+                >
+                  {brl(item.part)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {itens.length > 0 && (
+        <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 8, lineHeight: 1.5 }}>
+          Toque numa conta pra marcar como paga. Isso não muda o valor da divisão, só ajuda a acompanhar o que já foi acertado.
         </div>
       )}
     </div>
@@ -415,6 +531,11 @@ export default function Profile({
   pins = { Rui: null, Ana: null },
   onSetPin,
   onRemovePin,
+  bills = [],
+  sharedPurchases = [],
+  onTogglePaid,
+  onToggleSharedPurchasePaid,
+  onSetGroupPaid,
 }) {
   const rendaFixa = income[person] || 0;
   const rendaExtras = extras[person] || [];
@@ -598,7 +719,14 @@ export default function Profile({
         <div style={{ fontSize: 12.5, color: color.textMedium }}>{pctComprometida.toFixed(0)}% da renda comprometida</div>
       </div>
 
-      <ListaValores titulo="Parte das contas de casa" itens={partesCasa} vazio="Nenhuma conta ainda." />
+      <ContasCasaLista
+        itens={partesCasa}
+        bills={bills}
+        sharedPurchases={sharedPurchases}
+        onTogglePaid={onTogglePaid}
+        onToggleSharedPurchasePaid={onToggleSharedPurchasePaid}
+        onSetGroupPaid={onSetGroupPaid}
+      />
       <ListaValores
         titulo="Contas pessoais fixas"
         itens={fixas}

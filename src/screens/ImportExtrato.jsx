@@ -27,10 +27,11 @@ function Chip({ active, children, onClick, small }) {
 // Tela de "Importar extrato": a pessoa cola ou sobe o CSV baixado do banco,
 // a gente lê e sugere uma categoria pra cada compra, e ela só confirma ou
 // corrige antes de lançar tudo de uma vez.
-export default function ImportExtrato({ cats, names, onClose, onConfirm }) {
+export default function ImportExtrato({ cats, cards = [], names, onClose, onConfirm }) {
   const [rawText, setRawText] = useState('');
   const [items, setItems] = useState(null); // null = ainda não leu o extrato
   const [erro, setErro] = useState('');
+  const [cardId, setCardId] = useState(cards[0]?.id || null);
 
   function handleFile(e) {
     const file = e.target.files?.[0];
@@ -51,7 +52,11 @@ export default function ImportExtrato({ cats, names, onClose, onConfirm }) {
       parsed.map((it) => ({
         ...it,
         classificacao: 'casa',
-        category: guessCategory(it.desc, cats) || cats[0]?.id || '',
+        // Quando o app não reconhece o estabelecimento, deixa sem categoria
+        // (não chuta "Mercado" só porque é a primeira da lista) — senão
+        // toda compra não reconhecida (Uber, farmácia, loja qualquer) cai
+        // errado dentro de Mercado, tanto no "Onde foi" quanto na Divisão.
+        category: guessCategory(it.desc, cats) || '',
       }))
     );
   }
@@ -148,6 +153,27 @@ export default function ImportExtrato({ cats, names, onClose, onConfirm }) {
             de importar — o app só chuta a categoria, quem sabe é você.
           </div>
 
+          {cards.length > 0 && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 8 }}>
+                De qual cartão é esse extrato?
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <Chip active={cardId === null} onClick={() => setCardId(null)}>
+                  Nenhum / não sei
+                </Chip>
+                {cards.map((c) => (
+                  <Chip key={c.id} active={cardId === c.id} onClick={() => setCardId(c.id)}>
+                    {c.name}
+                  </Chip>
+                ))}
+              </div>
+              <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6 }}>
+                Isso é só pra acompanhar o limite do cartão em Contas → Cartões — não muda a divisão de ninguém.
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
             {items.map((it) => (
               <div
@@ -203,7 +229,9 @@ export default function ImportExtrato({ cats, names, onClose, onConfirm }) {
           </div>
 
           <button
-            onClick={() => onConfirm(items)}
+            onClick={() =>
+              onConfirm(items.map((it) => (it.classificacao === 'casa' ? { ...it, cardId } : it)))
+            }
             disabled={totalSelecionado === 0}
             style={{
               width: '100%',

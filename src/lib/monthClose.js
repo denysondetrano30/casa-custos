@@ -6,6 +6,8 @@
 // continua igual: bills (contas fixas), installments (parcelas), personal.fixed
 // (contas pessoais fixas), goals, splitPct, names, personalCategories.
 
+import { commitmentIdForSharedPurchase } from './commitments';
+
 const MESES_FULL = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
@@ -25,9 +27,24 @@ export function proximoMes(label) {
   return { label: `${MESES_FULL[novoIdx]} ${ano}`, daysInMonth };
 }
 
+// Acha, dentro do resultado da divisão (splitBills), quem ficou responsável
+// por um compromisso específico (uma conta fixa ou uma compra conjunta) —
+// usado pra registrar, no fechamento do mês, quem ainda devia o quê.
+function responsavelDoCompromisso(commitmentId, splitResult) {
+  if (!splitResult) return [];
+  const responsaveis = [];
+  for (const pessoa of Object.keys(splitResult)) {
+    const item = splitResult[pessoa].find((i) => i.id === commitmentId);
+    if (item) responsaveis.push({ pessoa, part: item.part });
+  }
+  return responsaveis;
+}
+
 // Monta o resumo do mês que está sendo fechado — isso é o que fica
-// guardado no histórico, pra consultar depois.
-export function buildSnapshot(state) {
+// guardado no histórico, pra consultar depois. `splitResult` (opcional) é
+// o resultado de splitBills daquele mês, usado só pra registrar quem ficou
+// de pagar cada pendência — não influencia nenhum valor somado aqui.
+export function buildSnapshot(state, splitResult) {
   const catsSpentRaw = state.cats.reduce((s, c) => s + c.spent, 0);
   const billsAll = state.bills.reduce((s, b) => s + b.value, 0);
   const sharedAll = (state.sharedPurchases || []).reduce((s, p) => s + p.value, 0);
@@ -47,6 +64,23 @@ export function buildSnapshot(state) {
     0
   );
 
+  // Tudo que, na hora de fechar o mês, ainda não tinha sido marcado como
+  // pago — fica registrado no histórico com quem era o responsável, pra
+  // não perder o rastro de uma pendência que atravessou o fechamento.
+  const pendencias = [
+    ...state.bills
+      .filter((b) => !b.paid)
+      .map((b) => ({ tipo: 'conta', name: b.name, value: b.value, responsaveis: responsavelDoCompromisso(`bill-${b.id}`, splitResult) })),
+    ...(state.sharedPurchases || [])
+      .filter((p) => !p.paid)
+      .map((p) => ({
+        tipo: 'compra',
+        name: p.name,
+        value: p.value,
+        responsaveis: responsavelDoCompromisso(commitmentIdForSharedPurchase(p), splitResult),
+      })),
+  ];
+
   return {
     id: Date.now(),
     label: state.month.label,
@@ -57,6 +91,7 @@ export function buildSnapshot(state) {
     gastoTotalCasal,
     rendaCasal,
     personalVariableTotal,
+    pendencias,
   };
 }
 
@@ -69,6 +104,10 @@ export function resetForNextMonth(state, snapshot) {
     month: { label, today: 1, daysInMonth, status: 'no ritmo' },
     cats: state.cats.map((c) => ({ ...c, spent: 0 })),
     txs: [],
+    // O "pago" é sempre relativo ao mês em curso — no mês novo, a conta
+    // fixa (que continua existindo, pois é recorrente) volta a ficar
+    // pendente até ser paga de novo.
+    bills: state.bills.map((b) => ({ ...b, paid: false })),
     sharedPurchases: [],
     personal: {
       Rui: { ...state.personal.Rui, variable: [] },

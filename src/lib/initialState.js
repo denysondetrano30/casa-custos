@@ -43,6 +43,10 @@ export const initialState = {
 
   installments: [],
 
+  // Cartões de crédito cadastrados (nome + limite) — só informativo, pra
+  // acompanhar quanto de limite ainda sobra em cada um. Ver src/lib/cardLimits.js.
+  cards: [],
+
   // Resumo de cada mês já fechado (ver src/lib/monthClose.js) — usado na
   // aba Contas → Histórico pra comparar a evolução mês a mês.
   historico: [],
