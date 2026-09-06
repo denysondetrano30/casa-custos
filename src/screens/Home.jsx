@@ -1,6 +1,6 @@
 import { CaretLeft, CaretRight, DownloadSimple, PencilSimple, Trash } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
-import { brl } from '../lib/format';
+import { brl, parseValor } from '../lib/format';
 
 function SectionLabel({ children }) {
   return (
@@ -239,7 +239,32 @@ function ImportCard({ onClick }) {
   );
 }
 
-function RecentTransactions({ txs, onDeleteTx }) {
+// Monta o textinho cinza embaixo de cada lançamento na hora de mostrar,
+// e não na hora de salvar. É o que faz o nome de exibição ficar sempre
+// certo (antes ficava gravado o nome interno, tipo "Ana") e a data
+// mostrar o dia de verdade em vez da palavra "hoje" para sempre.
+// Lançamentos antigos não têm esses campos — para eles, continua valendo
+// o texto que já estava gravado.
+function textoDoLancamento(tx, names) {
+  if (!tx.data && !tx.payer) return tx.meta || '';
+  const partes = [];
+  if (tx.payer) partes.push(names[tx.payer] || tx.payer);
+  if (tx.data) {
+    const d = new Date(tx.data);
+    if (!Number.isNaN(d.getTime())) {
+      const hoje = new Date();
+      const mesmoDia =
+        d.getDate() === hoje.getDate() &&
+        d.getMonth() === hoje.getMonth() &&
+        d.getFullYear() === hoje.getFullYear();
+      partes.push(mesmoDia ? 'hoje' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
+    }
+  }
+  if (tx.ondeFoi) partes.push(tx.ondeFoi);
+  return partes.join(' · ') || tx.meta || '';
+}
+
+function RecentTransactions({ txs, onDeleteTx, names }) {
   return (
     <div>
       <SectionLabel>Últimos lançamentos</SectionLabel>
@@ -276,7 +301,7 @@ function RecentTransactions({ txs, onDeleteTx }) {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5 }}>{tx.desc}</div>
-              <div style={{ fontSize: 11, color: color.textWeak }}>{tx.meta}</div>
+              <div style={{ fontSize: 11, color: color.textWeak }}>{textoDoLancamento(tx, names)}</div>
             </div>
             <div style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{brl(tx.value)}</div>
             {onDeleteTx && (
@@ -297,15 +322,15 @@ function RecentTransactions({ txs, onDeleteTx }) {
   );
 }
 
-export default function Home({ month, cats, txs, onEditCategoryBudget, rendaCasal, billsTotal, bills = [], sharedPurchases = [], onImport, onDeleteTx }) {
+export default function Home({ month, cats, txs, names = { Rui: 'Rui', Ana: 'Ana' }, onEditCategoryBudget, rendaCasal, billsTotal, bills = [], sharedPurchases = [], onImport, onDeleteTx }) {
   const spent = cats.reduce((sum, c) => sum + c.spent, 0);
   const gastoTotal = spent + billsTotal;
 
   function handleEditBudget(cat) {
     const resposta = window.prompt(`Novo orçamento mensal para "${cat.name}" (só números, ex. 1500):`, cat.budget);
     if (resposta === null) return;
-    const valor = Number(resposta.replace(',', '.'));
-    if (Number.isNaN(valor) || valor < 0) {
+    const valor = parseValor(resposta);
+    if (valor === null || valor < 0) {
       window.alert('Isso não parece um número válido. Tente de novo.');
       return;
     }
@@ -335,7 +360,7 @@ export default function Home({ month, cats, txs, onEditCategoryBudget, rendaCasa
       <AvisoContasVencendo bills={bills} hoje={month.today} />
       <CategoriesSection cats={cats} bills={bills} sharedPurchases={sharedPurchases} onEditBudget={handleEditBudget} />
       <ImportCard onClick={onImport} />
-      <RecentTransactions txs={txs} onDeleteTx={onDeleteTx} />
+      <RecentTransactions txs={txs} onDeleteTx={onDeleteTx} names={names} />
     </div>
   );
 }

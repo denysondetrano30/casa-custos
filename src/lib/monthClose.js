@@ -3,7 +3,8 @@
 // README continua valendo pro resto do app — isso aqui só decide o que é
 // "deste mês" (zera) e o que é permanente/recorrente (continua igual):
 // zera: cats.spent, txs, sharedPurchases, gastos pessoais variáveis, extras.
-// continua igual: bills (contas fixas), installments (parcelas), personal.fixed
+// continua igual: bills (contas fixas), personal.fixed; installments
+// (parcelas) continuam, mas andam uma parcela a cada fechamento
 // (contas pessoais fixas), goals, splitPct, names, personalCategories.
 
 import { commitmentIdForSharedPurchase } from './commitments';
@@ -101,7 +102,9 @@ export function resetForNextMonth(state, snapshot) {
   const { label, daysInMonth } = proximoMes(state.month.label);
   return {
     ...state,
-    month: { label, today: 1, daysInMonth, status: 'no ritmo' },
+    // Sem `today` aqui de propósito: o dia é calculado na hora, em
+    // src/lib/hoje.js — gravado, ele congelava e nunca mais avançava.
+    month: { label, daysInMonth, status: 'no ritmo' },
     cats: state.cats.map((c) => ({ ...c, spent: 0 })),
     txs: [],
     // O "pago" é sempre relativo ao mês em curso — no mês novo, a conta
@@ -109,6 +112,18 @@ export function resetForNextMonth(state, snapshot) {
     // pendente até ser paga de novo.
     bills: state.bills.map((b) => ({ ...b, paid: false })),
     sharedPurchases: [],
+    // Passou um mês: cada parcelamento em aberto andou uma parcela. Os que
+    // chegaram na última somem da lista — estão quitados. Antes disso, o
+    // contador nunca avançava e "parcela 1 de 12" ficava para sempre,
+    // projetando 12 meses à frente todo mês.
+    installments: (state.installments || [])
+      .map((i) => {
+        // Sem um número de parcelas válido não dá pra saber se acabou —
+        // deixa o registro quieto em vez de apagar por engano.
+        if (!Number.isFinite(i.count) || i.count <= 0) return i;
+        return { ...i, done: Math.min((i.done || 0) + 1, i.count) };
+      })
+      .filter((i) => !Number.isFinite(i.count) || i.count <= 0 || i.done < i.count),
     // Contas pessoais fixas continuam existindo (são recorrentes) e o
     // "pago" delas volta a ficar pendente, igual as contas de casa. Os
     // gastos pessoais variáveis são pontuais desse mês, então somem

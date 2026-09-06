@@ -4,6 +4,22 @@
 // ponto de partida razoável, mas ainda não há uma tela para editá-los —
 // se quiser valores diferentes, me diga e eu ajusto aqui.
 
+const MESES_NOMES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+function mesAtual() {
+  const agora = new Date();
+  const ano = agora.getFullYear();
+  const mes = agora.getMonth();
+  return {
+    label: `${MESES_NOMES[mes]} ${ano}`,
+    daysInMonth: new Date(ano, mes + 1, 0).getDate(),
+    status: 'no ritmo',
+  };
+}
+
 export const initialState = {
   // Nomes de exibição das duas pessoas da casa. "Rui" e "Ana" continuam
   // existindo como identificadores internos (é o que o resto do código usa
@@ -16,12 +32,10 @@ export const initialState = {
   // senha ainda. Enquanto nenhuma das duas tiver senha, o app abre direto.
   pins: { Rui: null, Ana: null },
 
-  month: {
-    label: 'Agosto 2026',
-    today: 30,
-    daysInMonth: 31,
-    status: 'no ritmo',
-  },
+  // O mês começa no mês real de quem abriu o app pela primeira vez. Era
+  // um literal fixo ('Agosto 2026') — quem começasse depois disso nascia
+  // com o mês já vencido, e o app marcava todas as contas como vencidas.
+  month: mesAtual(),
 
   cats: [
     { id: 'mercado', name: 'Mercado', icon: 'ph-basket', spent: 0, budget: 2000, color: '#9184d9' },

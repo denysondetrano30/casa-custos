@@ -149,7 +149,9 @@ export default function Add({
       </div>
       <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6, lineHeight: 1.5 }}>
         {pagamentoEscolhido?.ehCartao
-          ? 'Vai ficar pendente na fatura desse cartão e ocupando limite até você marcar como pago.'
+          ? addType === 'pessoal'
+            ? 'Vai ficar pendente na fatura desse cartão e ocupando limite até você marcar como pago no Perfil.'
+            : 'Fica registrado de onde saiu. Gasto de casa lançado aqui entra no orçamento da categoria — pra ele entrar na fatura dividida do cartão, use Início → Importar extrato.'
           : 'Já sai como pago, porque o dinheiro saiu da conta na hora.'}
         {cards.length === 0 && ' Cadastre seus cartões em Contas → Cartões pra escolher um aqui.'}
       </div>

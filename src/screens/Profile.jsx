@@ -3,7 +3,7 @@ import { X, Plus, PencilSimple, Trash, CheckCircle, Circle } from '@phosphor-ico
 import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { color, radius } from '../lib/tokens';
-import { brl } from '../lib/format';
+import { brl, parseValor } from '../lib/format';
 import { textoPagamento } from '../lib/paymentMethods';
 
 function Segmented({ value, onChange, options, labels }) {
@@ -212,6 +212,21 @@ function resolverPagamento(itemId, bills, sharedPurchases) {
   return null;
 }
 
+// Quanto do que ESTA pessoa devia daquele item já foi pago.
+//
+// Detalhe que importa: uma fatura pode ter sido dividida entre os dois
+// (ex. R$ 1.000 -> 600 pra um, 400 pro outro). Se R$ 500 dela foram
+// pagos, não dá pra creditar R$ 500 no perfil de cada um — somando as
+// duas telas o app diria que R$ 1.000 foram pagos. Então cada um leva a
+// fatia do pagamento na mesma proporção da parte que ficou com ele.
+function parteJaPaga(item, bills, sharedPurchases) {
+  const pagamento = resolverPagamento(item.id, bills, sharedPurchases);
+  const valorPago = pagamento?.valorPago || 0;
+  if (valorPago <= 0) return 0;
+  const proporcao = item.value > 0 ? item.part / item.value : 1;
+  return Math.min(item.part, valorPago * proporcao);
+}
+
 // A parte de contas de casa que ficou com esta pessoa, segundo a divisão —
 // aqui é onde cada um marca o que já pagou. É pessoal: cada um cuida da
 // própria lista, sem misturar com a do outro (diferente da tela Contas,
@@ -220,10 +235,7 @@ function ContasCasaLista({ itens, bills, sharedPurchases, onTogglePaid, onToggle
   // O total é sempre o valor cheio da parte dessa pessoa — pagar não faz
   // o gasto sumir. O que já foi pago aparece do lado, como "falta X".
   const total = itens.reduce((s, i) => s + i.part, 0);
-  const pago = itens.reduce((s, i) => {
-    const pagamento = resolverPagamento(i.id, bills, sharedPurchases);
-    return s + Math.min(i.part, pagamento?.valorPago || 0);
-  }, 0);
+  const pago = itens.reduce((s, i) => s + parteJaPaga(i, bills, sharedPurchases), 0);
   const falta = Math.max(0, total - pago);
 
   return (
@@ -347,8 +359,8 @@ function RecebimentosPJ({ itens = [], onAdd, onEdit, onDelete }) {
     }
     const valorStr = window.prompt('Valor recebido (só números, ex. 4500):');
     if (valorStr === null) return;
-    const valor = Number(String(valorStr).replace(',', '.'));
-    if (Number.isNaN(valor) || valor <= 0) {
+    const valor = parseValor(valorStr);
+    if (valor === null || valor <= 0) {
       window.alert('Isso não parece um valor válido.');
       return;
     }
@@ -365,8 +377,8 @@ function RecebimentosPJ({ itens = [], onAdd, onEdit, onDelete }) {
     }
     const valorStr = window.prompt('Valor recebido:', item.valor);
     if (valorStr === null) return;
-    const valor = Number(String(valorStr).replace(',', '.'));
-    if (Number.isNaN(valor) || valor <= 0) {
+    const valor = parseValor(valorStr);
+    if (valor === null || valor <= 0) {
       window.alert('Isso não parece um valor válido.');
       return;
     }
@@ -592,6 +604,7 @@ export default function Profile({
   onEditPersonalItem,
   onDeletePersonalItem,
   onTogglePersonalItemPaid,
+  onResetTudo,
   recebimentosPJ = { Rui: [], Ana: [] },
   onAddRecebimentoPJ,
   onEditRecebimentoPJ,
@@ -626,10 +639,7 @@ export default function Profile({
   const gastoReal = gastoCasaTotal + gastoFixasTotal + gastoVariaveisTotal;
 
   // Quanto desse gasto já foi quitado (marcado como pago).
-  const pagoCasa = partesCasa.reduce((s, i) => {
-    const pagamento = resolverPagamento(i.id, bills, sharedPurchases);
-    return s + Math.min(i.part, pagamento?.valorPago || 0);
-  }, 0);
+  const pagoCasa = partesCasa.reduce((s, i) => s + parteJaPaga(i, bills, sharedPurchases), 0);
   const pagoFixas = fixas.filter((i) => i.paid).reduce((s, i) => s + i.value, 0);
   const pagoVariaveis = variaveis.filter((i) => i.paid).reduce((s, i) => s + i.value, 0);
   const jaPago = pagoCasa + pagoFixas + pagoVariaveis;
@@ -719,7 +729,36 @@ export default function Profile({
         >
           <div>
             <div style={{ fontSize: 11, color: color.textMedium }}>Renda fixa</div>
-            <div style={{ fontSize: 18, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{brl(rendaFixa)}</div>
+            <button
+              onClick={() => {
+                const resposta = window.prompt(
+                  'Qual é a sua renda fixa mensal? (pode escrever assim: 4.873,20)',
+                  String(rendaFixa || '')
+                );
+                if (resposta === null) return;
+                const valor = parseValor(resposta);
+                if (valor === null || valor < 0) {
+                  window.alert('Isso não parece um valor válido. Tente de novo, por exemplo: 3200 ou 4.873,20.');
+                  return;
+                }
+                onUpdateIncome(person, valor);
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                color: color.text,
+                fontSize: 18,
+                fontWeight: 500,
+                fontVariantNumeric: 'tabular-nums',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              aria-label="Digitar a renda fixa"
+            >
+              {brl(rendaFixa)}
+              <PencilSimple size={12} color={color.textWeak} style={{ marginLeft: 6, verticalAlign: 'middle' }} />
+            </button>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <StepperButton onClick={() => onUpdateIncome(person, Math.max(0, rendaFixa - 100))}>−</StepperButton>
@@ -827,8 +866,8 @@ export default function Profile({
           if (novoNome === null) return;
           const novoValorStr = window.prompt('Valor (só números):', item.value);
           if (novoValorStr === null) return;
-          const novoValor = Number(String(novoValorStr).replace(',', '.'));
-          if (!novoNome.trim() || Number.isNaN(novoValor) || novoValor < 0) {
+          const novoValor = parseValor(novoValorStr);
+          if (!novoNome.trim() || novoValor === null || novoValor < 0) {
             window.alert('Alguma dessas respostas não é válida. Tente de novo.');
             return;
           }
@@ -847,8 +886,8 @@ export default function Profile({
           if (novoNome === null) return;
           const novoValorStr = window.prompt('Valor (só números):', item.value);
           if (novoValorStr === null) return;
-          const novoValor = Number(String(novoValorStr).replace(',', '.'));
-          if (!novoNome.trim() || Number.isNaN(novoValor) || novoValor < 0) {
+          const novoValor = parseValor(novoValorStr);
+          if (!novoNome.trim() || novoValor === null || novoValor < 0) {
             window.alert('Alguma dessas respostas não é válida. Tente de novo.');
             return;
           }
@@ -885,14 +924,16 @@ export default function Profile({
 
       <div style={{ borderTop: `1px solid ${color.borderSubtle}`, paddingTop: 16 }}>
         <div style={{ fontSize: 11, color: color.textWeak, marginBottom: 10 }}>
-          Isso apaga só os dados guardados NESTE aparelho e navegador — não afeta outros celulares ou computadores.
+          Os dados da casa ficam na nuvem e são compartilhados entre vocês dois — apagar aqui apaga para os dois, em todos os aparelhos.
         </div>
         <button
           onClick={() => {
-            if (window.confirm('Apagar todos os dados deste aparelho e recomeçar do zero?')) {
-              localStorage.removeItem('casa:v1');
-              window.location.reload();
-            }
+            // Os dados da casa são compartilhados entre vocês dois (ficam
+            // na nuvem, não neste aparelho), então isso apaga pros dois.
+            // Por isso a confirmação é dupla.
+            if (!window.confirm('Isso apaga TODOS os dados da casa — contas, compras, metas, histórico — para as duas pessoas, não só neste aparelho. Tem certeza?')) return;
+            if (!window.confirm('Última confirmação: não dá pra desfazer. Apagar tudo e recomeçar do zero?')) return;
+            if (onResetTudo) onResetTudo();
           }}
           style={{
             width: '100%',

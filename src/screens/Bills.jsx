@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle, Circle, PencilSimple, Trash, Plus, CreditCard } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
-import { brl } from '../lib/format';
+import { brl, parseValor } from '../lib/format';
 import { buildFutureMonths, monthLabel } from '../lib/futureBills';
 import { commitmentIdForSharedPurchase } from '../lib/commitments';
 import { buildCardUsage } from '../lib/cardLimits';
@@ -59,6 +59,7 @@ function EstesMes({
   onToggleSharedPurchasePaid,
   cats = [],
   rendaCasal,
+  gastoCategorias = 0,
   mesAtualLabel,
   onFecharMes,
   hoje,
@@ -67,8 +68,13 @@ function EstesMes({
 }) {
   const totalContas = bills.reduce((s, b) => s + b.value, 0);
   const totalCompras = sharedPurchases.reduce((s, p) => s + p.value, 0);
-  const saldo = rendaCasal - totalContas - totalCompras;
-  const pctComprometido = rendaCasal > 0 ? ((totalContas + totalCompras) / rendaCasal) * 100 : 0;
+  // Mesma conta que o Início faz: categorias + contas fixas + compras de
+  // cartão, sobre a renda do casal inteira (fixa + extras). Antes esta
+  // tela usava só uma parte disso e mostrava um percentual diferente do
+  // Início, com a mesma frase.
+  const gastoDoMes = gastoCategorias + totalContas + totalCompras;
+  const saldo = rendaCasal - gastoDoMes;
+  const pctComprometido = rendaCasal > 0 ? (gastoDoMes / rendaCasal) * 100 : 0;
 
   const porSemana = {};
   bills.forEach((b) => {
@@ -82,10 +88,9 @@ function EstesMes({
   const vencidas = hoje ? bills.filter((b) => !b.paid && (b.due || 1) <= hoje) : [];
 
   // O marcar como pago das contas fixas continua vivendo no Perfil de cada
-  // pessoa. Já a compra de cartão pode ser marcada aqui mesmo, direto na
-  // lista detalhada — e, diferente da conta fixa, assim que ela é marcada
-  // como paga ela sai do valor dividido (porque já foi resolvida entre
-  // vocês de outro jeito, não faz sentido continuar "devendo" ela).
+  // pessoa; a compra de cartão pode ser marcada aqui mesmo. Marcar como
+  // pago NÃO tira o valor da divisão nem do gasto do mês — só abate o
+  // "ainda falta pagar" no Perfil (ver a nota grande em commitments.js).
   const pendentes = [
     ...bills.filter((b) => !b.paid).map((b) => ({ id: `bill-${b.id}`, name: b.name, value: b.value })),
     ...sharedPurchases
@@ -134,7 +139,7 @@ function EstesMes({
             color: color.text,
           }}
         >
-          {brl(totalContas + totalCompras)}
+          {brl(gastoDoMes)}
         </div>
         <div style={{ fontSize: 12, color: saldo < 0 ? color.alertText : color.textMedium, marginTop: 8 }}>
           {saldo < 0 ? 'Faltam para fechar o mês' : 'Sobra'}: {brl(saldo)} (de {brl(rendaCasal)} de renda)
@@ -225,10 +230,10 @@ function EstesMes({
             ))}
           </div>
           <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6 }}>
-            Essas compras vêm do extrato importado (ou lançadas na mão) e sempre contam no saldo acima. Toque numa
-            pra marcar como paga — aí ela sai do valor dividido na Divisão e no Perfil, porque já foi resolvida de
-            outro jeito. Na Divisão, todas juntam numa fatura só por cartão, mesmo as categorizadas como Mercado —
-            a categoria aqui é só pra saber onde foi o dinheiro.
+            Essas compras vêm do extrato importado (ou lançadas na mão) e contam no gasto do mês acima. Toque numa
+            pra marcar como paga: ela continua contando como gasto (pagar não faz o dinheiro voltar), mas sai do
+            "ainda falta pagar" de quem ficou com ela, no Perfil. A divisão em si não muda. Na Divisão, todas juntam
+            numa fatura só por cartão, mesmo as de Mercado — a categoria aqui só diz onde o dinheiro foi.
           </div>
         </div>
       )}
@@ -284,8 +289,8 @@ function EstesMes({
                       if (novoDia === null) return;
                       const novoValorStr = window.prompt('Valor (só números, ex. 855):', b.value);
                       if (novoValorStr === null) return;
-                      const novoValor = Number(String(novoValorStr).replace(',', '.'));
-                      if (!novoNome.trim() || Number.isNaN(novoValor) || novoValor < 0) {
+                      const novoValor = parseValor(novoValorStr);
+                      if (!novoNome.trim() || novoValor === null || novoValor < 0) {
                         window.alert('Alguma dessas respostas não é válida. Tente de novo.');
                         return;
                       }
@@ -437,7 +442,8 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment, c
         }}
       >
         <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 4 }}>
-          Previsão de {monthLabel(state.month.label, selecionado)}
+          {mes.k === 0 ? 'Compromissos de ' : 'Previsão de '}
+          {monthLabel(state.month.label, selecionado)}
         </div>
         <div style={{ fontSize: 24, fontWeight: 500, letterSpacing: '-.025em', fontVariantNumeric: 'tabular-nums', marginBottom: 6 }}>
           {brl(mes.total)}
@@ -451,6 +457,12 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment, c
           {mes.k === 0 ? 'Compras no cartão deste mês' : 'Parcelas em aberto'}:{' '}
           {brl(mes.total - mes.totalContasFixas - mes.totalSimulacao)}
         </div>
+        {mes.k === 0 && (
+          <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 8, lineHeight: 1.5 }}>
+            Só o que já está comprometido: contas fixas e cartão. Os gastos lançados nas categorias (mercado do dia a
+            dia, etc.) aparecem no total da aba "Este mês" — por isso os dois números são diferentes.
+          </div>
+        )}
         {mes.totalSimulacao > 0 && (
           <div style={{ fontSize: 12, color: color.accentLight, marginTop: 4 }}>
             Inclui a simulação: {brl(mes.totalSimulacao)}
@@ -577,8 +589,8 @@ function Cartoes({ state, onAddCard, onEditCard, onDeleteCard }) {
     if (nome === null || !nome.trim()) return;
     const limiteStr = window.prompt('Limite total desse cartão (só números, ex. 1900):');
     if (limiteStr === null) return;
-    const limite = Number(String(limiteStr).replace(',', '.'));
-    if (Number.isNaN(limite) || limite <= 0) {
+    const limite = parseValor(limiteStr);
+    if (limite === null || limite <= 0) {
       window.alert('Isso não parece um valor válido.');
       return;
     }
@@ -590,8 +602,8 @@ function Cartoes({ state, onAddCard, onEditCard, onDeleteCard }) {
     if (nome === null || !nome.trim()) return;
     const limiteStr = window.prompt('Limite total (só números):', card.limit);
     if (limiteStr === null) return;
-    const limite = Number(String(limiteStr).replace(',', '.'));
-    if (Number.isNaN(limite) || limite <= 0) {
+    const limite = parseValor(limiteStr);
+    if (limite === null || limite <= 0) {
       window.alert('Isso não parece um valor válido.');
       return;
     }
@@ -695,7 +707,7 @@ function Simulador({ onLancar }) {
   const [valor, setValor] = useState('');
   const [parcelas, setParcelas] = useState(1);
 
-  const valorNum = Number(valor.replace(',', '.')) || 0;
+  const valorNum = (parseValor(valor) || 0);
   const per = parcelas > 0 ? Math.round((valorNum / parcelas) * 100) / 100 : 0;
   const pronto = nome.trim() !== '' && valorNum > 0;
 
@@ -803,6 +815,8 @@ export default function Bills({
   onFecharMes,
   rendaCasal,
   rendaFixaCasal,
+  gastoCategorias = 0,
+  hoje,
   splitResult,
   names,
   onAddCard,
@@ -838,9 +852,10 @@ export default function Bills({
           onToggleSharedPurchasePaid={onToggleSharedPurchasePaid}
           cats={state.cats}
           rendaCasal={rendaCasal}
+          gastoCategorias={gastoCategorias}
           mesAtualLabel={state.month.label}
           onFecharMes={onFecharMes}
-          hoje={state.month.today}
+          hoje={hoje}
           splitResult={splitResult}
           names={names}
         />

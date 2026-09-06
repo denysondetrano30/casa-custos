@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Target, Plus, Trash, PencilSimple, PiggyBank } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
-import { brl } from '../lib/format';
+import { brl, parseValor } from '../lib/format';
 import { monthLabel } from '../lib/futureBills';
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -33,8 +33,11 @@ function GoalCard({ goal, baseMonthLabel, onAporte, onEdit, onDelete }) {
   function registrarAporte() {
     const resp = window.prompt(`Quanto você guardou para "${goal.name}" este mês?`, String(goal.monthly || ''));
     if (resp === null) return;
-    const valor = Number(String(resp).replace(',', '.'));
-    if (!Number.isFinite(valor) || valor === 0) return;
+    const valor = parseValor(resp);
+    if (!Number.isFinite(valor) || valor === 0) {
+      window.alert('Isso não parece um valor válido. Tente de novo, por exemplo: 250 ou 1.250,50.');
+      return;
+    }
     onAporte(goal.id, valor);
   }
 
@@ -45,9 +48,12 @@ function GoalCard({ goal, baseMonthLabel, onAporte, onEdit, onDelete }) {
     if (alvo === null) return;
     const mensal = window.prompt('Aporte mensal:', String(goal.monthly));
     if (mensal === null) return;
-    const target = Number(String(alvo).replace(',', '.'));
-    const monthly = Number(String(mensal).replace(',', '.'));
-    if (!Number.isFinite(target) || target <= 0) return;
+    const target = parseValor(alvo);
+    const monthly = parseValor(mensal);
+    if (!Number.isFinite(target) || target <= 0) {
+      window.alert('O valor alvo não parece válido. Tente de novo, por exemplo: 12.000 ou 12000.');
+      return;
+    }
     onEdit(goal.id, { name: nome.trim() || goal.name, target, monthly: Number.isFinite(monthly) ? monthly : goal.monthly });
   }
 
@@ -148,10 +154,11 @@ function NovaMetaForm({ onAdd, onClose, baseMonthLabel }) {
 
   const meses = mesesAte(baseMonthLabel, dataAlvo);
   const mesesValidos = meses !== null && meses > 0;
-  const aporteSugerido = mesesValidos && Number(target) > 0 ? Number(target) / meses : 0;
-  const monthly = monthlyManual !== '' ? Number(monthlyManual) : Math.ceil(aporteSugerido);
+  const alvoNum = parseValor(target) || 0;
+  const aporteSugerido = mesesValidos && alvoNum > 0 ? alvoNum / meses : 0;
+  const monthly = monthlyManual !== '' ? (parseValor(monthlyManual) || 0) : Math.ceil(aporteSugerido);
 
-  const pronto = name.trim() !== '' && Number(target) > 0;
+  const pronto = name.trim() !== '' && alvoNum > 0;
 
   function inputStyle() {
     return {
@@ -188,7 +195,7 @@ function NovaMetaForm({ onAdd, onClose, baseMonthLabel }) {
         </div>
       )}
 
-      {mesesValidos && Number(target) > 0 && (
+      {mesesValidos && alvoNum > 0 && (
         <div style={{ fontSize: 12, color: color.textMedium, marginBottom: 10, lineHeight: 1.5 }}>
           Faltam {meses} {meses === 1 ? 'mês' : 'meses'} — aporte sugerido: <strong>{brl(Math.ceil(aporteSugerido))}</strong>/mês
         </div>
@@ -205,7 +212,7 @@ function NovaMetaForm({ onAdd, onClose, baseMonthLabel }) {
         <button
           onClick={() => {
             if (!pronto) return;
-            onAdd({ name, target: Number(target), monthly: monthly || 0 });
+            onAdd({ name, target: alvoNum, monthly: monthly || 0 });
           }}
           disabled={!pronto}
           style={{

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, UploadSimple } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
-import { brl } from '../lib/format';
+import { brl, parseValor } from '../lib/format';
 import { parseExtratoCSV, guessCategory } from '../lib/importParsers';
 
 const inputStyle = {
@@ -160,12 +160,12 @@ export default function ImportExtrato({ cats, cards = [], names, onClose, onConf
   // mesmo fluxo de revisão e confirmação daqui pra baixo.
   function adicionarManual() {
     const desc = manual.desc.trim();
-    const value = Number(manual.value.replace(',', '.'));
+    const value = parseValor(manual.value);
     if (!desc) {
       window.alert('Digita o nome da compra.');
       return;
     }
-    if (Number.isNaN(value) || value <= 0) {
+    if (value === null || value <= 0) {
       window.alert('Digita um valor válido pra compra.');
       return;
     }

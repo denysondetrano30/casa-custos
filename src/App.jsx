@@ -23,6 +23,8 @@ import { splitBills } from './lib/split';
 import { buildSnapshot, resetForNextMonth } from './lib/monthClose';
 import { hashPin } from './lib/security';
 import { pagamentoFromOpcao, textoPagamento } from './lib/paymentMethods';
+import { diaDeHoje } from './lib/hoje';
+import { chaveParcelamento } from './lib/futureBills';
 
 const CHAVE_DESBLOQUEADO = 'casa:desbloqueado';
 
@@ -122,7 +124,13 @@ export default function App() {
               desc: desc || prev.cats.find((c) => c.id === cat)?.name || 'Gasto',
               icon: prev.cats.find((c) => c.id === cat)?.icon,
               catId: cat,
-              meta: `${payer} · hoje${ondeFoi ? ` · ${ondeFoi}` : ''}`,
+              // `payer` e `data` são guardados como dado puro; o texto que
+              // aparece na tela é montado no Home. Antes o texto já vinha
+              // pronto aqui dentro, o que congelava o nome interno
+              // ("Ana") e a palavra "hoje" para sempre.
+              payer,
+              data: new Date().toISOString(),
+              ondeFoi: ondeFoi || null,
               value,
               metodo: pagamento.metodo,
               cardId: pagamento.cardId,
@@ -327,7 +335,9 @@ export default function App() {
           desc: 'Mercado',
           icon: 'ph-basket',
           catId: 'mercado',
-          meta: `${payer} · hoje · ${METODO_LABEL[prev.shop.method]}`,
+          payer,
+          data: new Date().toISOString(),
+          ondeFoi: METODO_LABEL[prev.shop.method],
           value: credito,
         });
         if (debito > 0) {
@@ -336,7 +346,8 @@ export default function App() {
             desc: 'Mercado',
             icon: 'ph-basket',
             catId: 'mercado',
-            meta: 'hoje · Débito (parte da compra)',
+            data: new Date().toISOString(),
+            ondeFoi: 'Débito (parte da compra)',
             value: debito,
           });
         }
@@ -346,14 +357,15 @@ export default function App() {
           desc: 'Mercado',
           icon: 'ph-basket',
           catId: 'mercado',
-          meta: `hoje · ${METODO_LABEL[prev.shop.method]}`,
+          data: new Date().toISOString(),
+          ondeFoi: METODO_LABEL[prev.shop.method],
           value: total,
         });
       }
 
       const purchase = {
         id: purchaseId,
-        date: 'hoje',
+        date: new Date().toISOString(),
         items: prev.shop.items,
         total,
         credit: credito,
@@ -527,17 +539,45 @@ export default function App() {
 
         // classificacao === 'casa'
         if (it.parcelaTotal && it.parcelaTotal > 1) {
-          installments = [
-            ...installments,
-            {
-              id: Date.now() + Math.random(),
-              name: it.desc,
-              per: it.value,
-              count: it.parcelaTotal,
-              done: Math.max(0, (it.parcelaAtual || 1) - 1),
-              cardId: it.cardId || null,
-            },
-          ];
+          // A mesma compra parcelada volta a aparecer na fatura todo mês,
+          // uma parcela adiante. Se já conhecemos esse parcelamento, só
+          // atualizamos em que parcela ele está — criar de novo faria a
+          // previsão dos próximos meses (e o limite do cartão) inflar a
+          // cada importação.
+          const chave = chaveParcelamento(it.desc);
+          // Casa por nome + número de parcelas + valor da parcela. O valor
+          // entra na conta porque duas compras diferentes na mesma loja,
+          // ambas em 10x, seriam fundidas numa só se olhássemos só o nome.
+          const jaExiste = installments.find(
+            (p) =>
+              chaveParcelamento(p.name) === chave &&
+              p.count === it.parcelaTotal &&
+              Math.abs((p.per || 0) - it.value) < 0.02
+          );
+          if (jaExiste) {
+            installments = installments.map((p) =>
+              p === jaExiste
+                ? {
+                    ...p,
+                    per: it.value,
+                    done: Math.max(p.done || 0, Math.max(0, (it.parcelaAtual || 1) - 1)),
+                    cardId: p.cardId || it.cardId || null,
+                  }
+                : p
+            );
+          } else {
+            installments = [
+              ...installments,
+              {
+                id: Date.now() + Math.random(),
+                name: it.desc,
+                per: it.value,
+                count: it.parcelaTotal,
+                done: Math.max(0, (it.parcelaAtual || 1) - 1),
+                cardId: it.cardId || null,
+              },
+            ];
+          }
         }
 
         sharedPurchases = [
@@ -642,6 +682,13 @@ export default function App() {
     });
   }
 
+  // Volta a casa inteira pro estado inicial. Como o estado vive num
+  // documento compartilhado na nuvem, isso vale para as duas pessoas —
+  // por isso o Perfil pede confirmação dupla antes de chamar aqui.
+  function resetTudo() {
+    setState(() => ({ ...initialState }));
+  }
+
   function addPersonalCategory(nome) {
     setState((prev) => {
       const atuais = prev.personalCategories || [];
@@ -689,14 +736,26 @@ export default function App() {
   const billsTotal = state.bills.reduce((s, b) => s + b.value, 0) + sharedPurchasesTotal;
   const rendaCasal = state.income.Rui + state.income.Ana; // só renda fixa, usada nas faturas futuras
 
+  // O dia de hoje é calculado na hora (ver src/lib/hoje.js), não lido do
+  // estado — antes ficava congelado no valor gravado e nunca avançava, o
+  // que estragava o aviso de conta vencida e o "pode gastar por dia".
+  const mesComHoje = { ...state.month, today: diaDeHoje(state.month) };
+
+  // Gasto do mês do casal inteiro: categorias + contas fixas + compras de
+  // cartão. É o mesmo número em todas as telas — antes o Início e a aba
+  // Contas calculavam cada um do seu jeito e mostravam percentuais
+  // diferentes com a mesma frase.
+  const gastoCategorias = state.cats.reduce((s, c) => s + c.spent, 0);
+
   const SCREENS = {
     home: () => (
       <Home
-        month={state.month}
+        month={mesComHoje}
         cats={state.cats}
         bills={state.bills}
         sharedPurchases={state.sharedPurchases}
         txs={state.txs}
+        names={names}
         onEditCategoryBudget={editCategoryBudget}
         rendaCasal={rendaCasalTotal}
         billsTotal={billsTotal}
@@ -729,8 +788,10 @@ export default function App() {
         onLancarInstallment={lancarInstallment}
         onDeleteInstallment={deleteInstallment}
         onFecharMes={fecharMes}
-        rendaCasal={rendaCasal}
+        rendaCasal={rendaCasalTotal}
         rendaFixaCasal={rendaCasal}
+        gastoCategorias={gastoCategorias}
+        hoje={mesComHoje.today}
         splitResult={splitResult}
         names={names}
         onAddCard={addCard}
@@ -778,6 +839,7 @@ export default function App() {
         onEditPersonalItem={editPersonalItem}
         onDeletePersonalItem={deletePersonalItem}
         onTogglePersonalItemPaid={togglePersonalItemPaid}
+        onResetTudo={resetTudo}
         recebimentosPJ={state.recebimentosPJ}
         onAddRecebimentoPJ={addRecebimentoPJ}
         onEditRecebimentoPJ={editRecebimentoPJ}

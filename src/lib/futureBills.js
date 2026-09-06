@@ -57,3 +57,17 @@ export function monthLabel(baseLabel, k) {
   const novoAno = Number(ano) + Math.floor(totalIdx / 12) - (totalIdx < 0 ? 1 : 0);
   return `${novoMes}/${String(novoAno).slice(-2)}`;
 }
+
+// Tira o sufixo de parcela do nome ("Amazon - Parcela 3/8" -> "amazon")
+// pra conseguir reconhecer, na importação do mês seguinte, que aquela
+// linha é a MESMA compra parcelada que já está cadastrada — só que numa
+// parcela mais adiante. Sem isso, cada importação criava um parcelamento
+// novo e a previsão dos próximos meses inflava sem parar.
+export function chaveParcelamento(nome) {
+  return String(nome || '')
+    .replace(/\s*[-·]?\s*parcela\s*\d{1,2}\s*\/\s*\d{1,2}\s*/i, ' ')
+    .replace(/\s*[-·]?\s*\d{1,2}\s*\/\s*\d{1,2}\s*$/i, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Minus, X } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
-import { brl } from '../lib/format';
+import { brl, parseValor } from '../lib/format';
 
 function getMetodos(names) {
   return [
@@ -74,11 +74,12 @@ function AdicionarItem({ onAdd }) {
   const [preco, setPreco] = useState('');
   const [qty, setQty] = useState(1);
 
-  const pronto = nome.trim() !== '' && Number(preco) > 0;
+  const valorDigitado = parseValor(preco);
+  const pronto = nome.trim() !== '' && valorDigitado !== null && valorDigitado > 0;
 
   function adicionar() {
     if (!pronto) return;
-    onAdd({ id: Date.now(), name: nome, unitPrice: Number(preco.replace(',', '.')), qty });
+    onAdd({ id: Date.now(), name: nome, unitPrice: valorDigitado, qty });
     setNome('');
     setPreco('');
     setQty(1);
@@ -249,6 +250,20 @@ function ComoVaiPagar({ method, onChangeMethod, debitPart, onChangeDebitPart, to
   );
 }
 
+// Compras antigas guardavam a palavra "hoje" como texto; as novas guardam
+// a data de verdade. Isso entende as duas e mostra "hoje" só quando é hoje.
+function dataDaCompra(valor) {
+  if (!valor) return '';
+  const d = new Date(valor);
+  if (Number.isNaN(d.getTime())) return String(valor);
+  const agora = new Date();
+  const mesmoDia =
+    d.getDate() === agora.getDate() &&
+    d.getMonth() === agora.getMonth() &&
+    d.getFullYear() === agora.getFullYear();
+  return mesmoDia ? 'hoje' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
 export default function Shop({
   shop,
   mercado,
@@ -319,7 +334,7 @@ export default function Shop({
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <span>{p.date}</span>
+                  <span>{dataDaCompra(p.date)}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontVariantNumeric: 'tabular-nums' }}>{brl(p.total)}</span>
                     {onDeletePurchase && (
