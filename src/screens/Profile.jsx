@@ -70,13 +70,15 @@ function StepperButton({ children, onClick }) {
   );
 }
 
-function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem }) {
-  const total = itens.reduce((s, i) => s + (i.part ?? i.value), 0);
+function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem, onTogglePaid }) {
+  // O total do cabeçalho é só o que ainda falta pagar — o que já foi
+  // marcado como pago some daqui (mas continua na lista, riscado).
+  const totalAPagar = itens.filter((i) => !i.paid).reduce((s, i) => s + (i.part ?? i.value), 0);
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontSize: 12.5, color: color.textMedium }}>{titulo}</span>
-        <span style={{ fontSize: 12.5, color: color.textMedium }}>{brl(total)}</span>
+        <span style={{ fontSize: 12.5, color: color.textMedium }}>{brl(totalAPagar)}</span>
       </div>
       {itens.length === 0 ? (
         <div style={{ fontSize: 13, color: color.textWeak }}>{vazio}</div>
@@ -85,22 +87,49 @@ function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem }) {
           {itens.map((item, idx) => (
             <div
               key={item.id ?? idx}
+              onClick={() => onTogglePaid && onTogglePaid(item)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
+                gap: 10,
                 background: color.surface,
                 borderRadius: radius.row,
                 padding: '10px 12px',
                 fontSize: 13.5,
+                cursor: onTogglePaid ? 'pointer' : 'default',
               }}
             >
-              <span>{item.name}</span>
+              {onTogglePaid &&
+                (item.paid ? (
+                  <CheckCircle size={16} weight="fill" color={color.accentIcon} />
+                ) : (
+                  <Circle size={16} color={color.textWeak} />
+                ))}
+              <span
+                style={{
+                  flex: 1,
+                  color: item.paid ? color.textWeak : color.text,
+                  textDecoration: item.paid ? 'line-through' : 'none',
+                }}
+              >
+                {item.name}
+              </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{brl(item.part ?? item.value)}</span>
+                <span
+                  style={{
+                    fontVariantNumeric: 'tabular-nums',
+                    color: item.paid ? color.textWeak : color.text,
+                    textDecoration: item.paid ? 'line-through' : 'none',
+                  }}
+                >
+                  {brl(item.part ?? item.value)}
+                </span>
                 {onEditItem && (
                   <button
-                    onClick={() => onEditItem(item)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditItem(item);
+                    }}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
                     aria-label={`Editar ${item.name}`}
                   >
@@ -109,7 +138,8 @@ function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem }) {
                 )}
                 {onDeleteItem && (
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       if (window.confirm(`Apagar "${item.name}"?`)) onDeleteItem(item.id);
                     }}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
@@ -524,6 +554,7 @@ export default function Profile({
   onUpdateName,
   onEditPersonalItem,
   onDeletePersonalItem,
+  onTogglePersonalItemPaid,
   recebimentosPJ = { Rui: [], Ana: [] },
   onAddRecebimentoPJ,
   onEditRecebimentoPJ,
@@ -547,8 +578,10 @@ export default function Profile({
   const partesCasa = contasCasa || [];
 
   const gastoCasaTotal = partesCasa.reduce((s, i) => s + i.part, 0);
-  const gastoFixasTotal = fixas.reduce((s, i) => s + i.value, 0);
-  const gastoVariaveisTotal = variaveis.reduce((s, i) => s + i.value, 0);
+  // Contas/gastos já marcados como pago não entram mais no "gasto real do
+  // mês" — já foram resolvidos, mesma lógica das compras de cartão pagas.
+  const gastoFixasTotal = fixas.filter((i) => !i.paid).reduce((s, i) => s + i.value, 0);
+  const gastoVariaveisTotal = variaveis.filter((i) => !i.paid).reduce((s, i) => s + i.value, 0);
   const gastoReal = gastoCasaTotal + gastoFixasTotal + gastoVariaveisTotal;
 
   const sobra = rendaTotal - gastoReal;
@@ -744,6 +777,7 @@ export default function Profile({
           onEditPersonalItem(person, 'fixed', item.id, { name: novoNome.trim(), value: novoValor });
         }}
         onDeleteItem={(id) => onDeletePersonalItem(person, 'fixed', id)}
+        onTogglePaid={onTogglePersonalItemPaid ? (item) => onTogglePersonalItemPaid(person, 'fixed', item.id) : null}
       />
       <ListaValores
         titulo="Gastos pessoais variáveis"
@@ -762,6 +796,7 @@ export default function Profile({
           onEditPersonalItem(person, 'variable', item.id, { name: novoNome.trim(), value: novoValor });
         }}
         onDeleteItem={(id) => onDeletePersonalItem(person, 'variable', id)}
+        onTogglePaid={onTogglePersonalItemPaid ? (item) => onTogglePersonalItemPaid(person, 'variable', item.id) : null}
       />
 
       {onSetPin && (

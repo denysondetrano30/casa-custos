@@ -109,9 +109,13 @@ export function resetForNextMonth(state, snapshot) {
     // pendente até ser paga de novo.
     bills: state.bills.map((b) => ({ ...b, paid: false })),
     sharedPurchases: [],
+    // Contas pessoais fixas continuam existindo (são recorrentes) e o
+    // "pago" delas volta a ficar pendente, igual as contas de casa. Os
+    // gastos pessoais variáveis são pontuais desse mês, então somem
+    // inteiros — nem precisam resetar o "pago".
     personal: {
-      Rui: { ...state.personal.Rui, variable: [] },
-      Ana: { ...state.personal.Ana, variable: [] },
+      Rui: { ...state.personal.Rui, fixed: state.personal.Rui.fixed.map((i) => ({ ...i, paid: false })), variable: [] },
+      Ana: { ...state.personal.Ana, fixed: state.personal.Ana.fixed.map((i) => ({ ...i, paid: false })), variable: [] },
     },
     extras: { Rui: [], Ana: [] },
     historico: [snapshot, ...(state.historico || [])],

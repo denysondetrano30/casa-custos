@@ -95,8 +95,11 @@ export default function App() {
 
   function gastoRealDe(pessoa) {
     const casa = splitResult[pessoa].reduce((s, i) => s + i.part, 0);
-    const fixas = state.personal[pessoa].fixed.reduce((s, i) => s + i.value, 0);
-    const variaveis = state.personal[pessoa].variable.reduce((s, i) => s + i.value, 0);
+    // Contas/gastos pessoais já marcados como pago não entram mais no
+    // total — já foram resolvidos, igual as compras de cartão marcadas
+    // como pagas.
+    const fixas = state.personal[pessoa].fixed.filter((i) => !i.paid).reduce((s, i) => s + i.value, 0);
+    const variaveis = state.personal[pessoa].variable.filter((i) => !i.paid).reduce((s, i) => s + i.value, 0);
     return casa + fixas + variaveis;
   }
 
@@ -132,7 +135,7 @@ export default function App() {
               ...prev.personal[addPerson],
               [bucket]: [
                 ...prev.personal[addPerson][bucket],
-                { id: Date.now(), name: desc || pcat, value },
+                { id: Date.now(), name: desc || pcat, value, paid: false },
               ],
             },
           },
@@ -187,6 +190,26 @@ export default function App() {
         [pessoa]: {
           ...prev.personal[pessoa],
           [bucket]: prev.personal[pessoa][bucket].map((item) => (item.id === id ? { ...item, ...dados } : item)),
+        },
+      },
+    }));
+  }
+
+  // Marca uma conta pessoal fixa ou um gasto pessoal variável como pago —
+  // ela continua aparecendo na lista (só riscada), mas sai do total "a
+  // pagar" e do gasto real do mês, até o mês fechar (contas fixas voltam a
+  // ficar pendentes a cada mês novo; gastos variáveis somem no fechamento,
+  // então nem precisam resetar o "pago").
+  function togglePersonalItemPaid(pessoa, bucket, id) {
+    setState((prev) => ({
+      ...prev,
+      personal: {
+        ...prev.personal,
+        [pessoa]: {
+          ...prev.personal[pessoa],
+          [bucket]: prev.personal[pessoa][bucket].map((item) =>
+            item.id === id ? { ...item, paid: !item.paid } : item
+          ),
         },
       },
     }));
@@ -740,6 +763,7 @@ export default function App() {
         onUpdateName={updateName}
         onEditPersonalItem={editPersonalItem}
         onDeletePersonalItem={deletePersonalItem}
+        onTogglePersonalItemPaid={togglePersonalItemPaid}
         recebimentosPJ={state.recebimentosPJ}
         onAddRecebimentoPJ={addRecebimentoPJ}
         onEditRecebimentoPJ={editRecebimentoPJ}
