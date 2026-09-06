@@ -27,12 +27,17 @@ export function buildCommitments(state) {
     owner: b.owner,
   }));
 
-  // Uma compra já marcada como paga (ver Contas → Este mês, ou Perfil) já
-  // foi resolvida entre vocês de outro jeito — não faz sentido continuar
-  // dividindo um valor que já está quitado, então ela sai da conta daqui
-  // pra frente. (Diferente de conta fixa, que continua contando mesmo
-  // marcada como paga — ver nota no Perfil.)
-  const compras = (state.sharedPurchases || []).filter((p) => !p.paid);
+  // IMPORTANTE: aqui entram TODAS as compras, pagas ou não. O algoritmo de
+  // divisão (split.js) é guloso e ordena por valor — se a gente tirasse
+  // daqui uma compra só porque foi marcada como paga, o valor total mudaria
+  // e o split.js recalcularia do zero quem fica com o quê, "sequestrando"
+  // outras contas de uma pessoa pra outra sem ninguém ter pedido isso. A
+  // divisão em si (quem ficou responsável por cada fatura) tem que ficar
+  // igual o mês inteiro, não importa o que já foi pago. "Pago" é só uma
+  // marcação de acompanhamento — quem quiser saber quanto ainda falta pagar
+  // vê isso no Perfil, que desconta o que já foi pago do total de CADA
+  // pessoa, sem mexer na divisão em si.
+  const compras = state.sharedPurchases || [];
 
   const porCartao = {};
   compras.forEach((p) => {

@@ -161,28 +161,40 @@ function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem, onToggle
 // ("bill-123", "shared-456"), o registro original (conta fixa ou compra
 // conjunta) — é dele que vem o status "pago", que não existe no resultado
 // da divisão em si.
+// Devolve, pra um item da divisão, se (e quanto) já foi pago. `valorPago`
+// é o que entra no desconto do total de "ainda falta pagar" — a divisão
+// em si (o `part` de cada um) nunca muda por causa disso, só esse desconto
+// de acompanhamento (ver nota grande em src/lib/commitments.js).
 function resolverPagamento(itemId, bills, sharedPurchases) {
   if (typeof itemId !== 'string') return null;
   if (itemId.startsWith('bill-')) {
     const id = Number(itemId.slice('bill-'.length));
     const b = (bills || []).find((x) => x.id === id);
-    return b ? { paid: !!b.paid, tipo: 'bill', realId: b.id } : null;
+    return b ? { paid: !!b.paid, valorPago: b.paid ? b.value : 0, tipo: 'bill', realId: b.id } : null;
   }
   if (itemId.startsWith('shared-')) {
     const id = Number(itemId.slice('shared-'.length));
     const p = (sharedPurchases || []).find((x) => x.id === id);
-    return p ? { paid: !!p.paid, tipo: 'shared', realId: p.id } : null;
+    return p ? { paid: !!p.paid, valorPago: p.paid ? p.value : 0, tipo: 'shared', realId: p.id } : null;
   }
-  // "cartao-<chave>" é uma fatura que junta várias compras (todas menos as
-  // de Mercado) numa linha só — marcar como paga aqui marca todas de uma
-  // vez, porque é assim que ela é paga de verdade: numa cobrança só.
+  // "cartao-<chave>" é uma fatura que junta várias compras (de qualquer
+  // categoria, mercado incluso) numa linha só — marcar como paga aqui marca
+  // todas de uma vez, porque é assim que ela é paga de verdade: numa
+  // cobrança só. Mas se algumas compras dela já foram marcadas como pagas
+  // uma a uma (lá em Contas), a gente já desconta essa parte do total,
+  // mesmo sem a fatura inteira estar quitada ainda.
   if (itemId.startsWith('cartao-')) {
     const chave = itemId.slice('cartao-'.length);
-    const itens = (sharedPurchases || []).filter(
-      (p) => p.category !== 'mercado' && (p.cardId || '_geral') === chave
-    );
+    const itens = (sharedPurchases || []).filter((p) => (p.cardId || '_geral') === chave);
     if (itens.length === 0) return null;
-    return { paid: itens.every((p) => p.paid), tipo: 'cartaoGroup', ids: itens.map((p) => p.id), qtd: itens.length };
+    const valorPago = itens.filter((p) => p.paid).reduce((s, p) => s + p.value, 0);
+    return {
+      paid: itens.every((p) => p.paid),
+      valorPago,
+      tipo: 'cartaoGroup',
+      ids: itens.map((p) => p.id),
+      qtd: itens.length,
+    };
   }
   return null;
 }
@@ -192,7 +204,14 @@ function resolverPagamento(itemId, bills, sharedPurchases) {
 // própria lista, sem misturar com a do outro (diferente da tela Contas,
 // que é o histórico compartilhado dos dois).
 function ContasCasaLista({ itens, bills, sharedPurchases, onTogglePaid, onToggleSharedPurchasePaid, onSetGroupPaid }) {
-  const total = itens.reduce((s, i) => s + i.part, 0);
+  // O total aqui é o que AINDA falta pagar — desconta o que já foi
+  // marcado como pago, mas sem mudar o `part` de cada item (a divisão em
+  // si fica igual o mês inteiro; só esse desconto muda).
+  const total = itens.reduce((s, i) => {
+    const pagamento = resolverPagamento(i.id, bills, sharedPurchases);
+    const pago = Math.min(i.part, pagamento?.valorPago || 0);
+    return s + (i.part - pago);
+  }, 0);
 
   return (
     <div style={{ marginBottom: 18 }}>
@@ -577,7 +596,14 @@ export default function Profile({
   const variaveis = personal[person]?.variable || [];
   const partesCasa = contasCasa || [];
 
-  const gastoCasaTotal = partesCasa.reduce((s, i) => s + i.part, 0);
+  // Desconta o que já foi marcado como pago (contas fixas ou compras de
+  // cartão) do total — mas sem recalcular a divisão em si, que fica
+  // travada o mês inteiro (ver nota em src/lib/commitments.js).
+  const gastoCasaTotal = partesCasa.reduce((s, i) => {
+    const pagamento = resolverPagamento(i.id, bills, sharedPurchases);
+    const pago = Math.min(i.part, pagamento?.valorPago || 0);
+    return s + (i.part - pago);
+  }, 0);
   // Contas/gastos já marcados como pago não entram mais no "gasto real do
   // mês" — já foram resolvidos, mesma lógica das compras de cartão pagas.
   const gastoFixasTotal = fixas.filter((i) => !i.paid).reduce((s, i) => s + i.value, 0);
