@@ -71,14 +71,19 @@ function StepperButton({ children, onClick }) {
 }
 
 function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem, onTogglePaid }) {
-  // O total do cabeçalho é só o que ainda falta pagar — o que já foi
-  // marcado como pago some daqui (mas continua na lista, riscado).
-  const totalAPagar = itens.filter((i) => !i.paid).reduce((s, i) => s + (i.part ?? i.value), 0);
+  // O total é sempre o valor cheio — pagar não faz o gasto sumir. O que
+  // já foi pago vira o "falta X" ao lado.
+  const total = itens.reduce((s, i) => s + (i.part ?? i.value), 0);
+  const pago = itens.filter((i) => i.paid).reduce((s, i) => s + (i.part ?? i.value), 0);
+  const falta = Math.max(0, total - pago);
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontSize: 12.5, color: color.textMedium }}>{titulo}</span>
-        <span style={{ fontSize: 12.5, color: color.textMedium }}>{brl(totalAPagar)}</span>
+        <span style={{ fontSize: 12.5, color: color.textMedium }}>
+          {brl(total)}
+          {pago > 0 && <span style={{ color: color.accentLight }}> · falta {brl(falta)}</span>}
+        </span>
       </div>
       {itens.length === 0 ? (
         <div style={{ fontSize: 13, color: color.textWeak }}>{vazio}</div>
@@ -204,20 +209,25 @@ function resolverPagamento(itemId, bills, sharedPurchases) {
 // própria lista, sem misturar com a do outro (diferente da tela Contas,
 // que é o histórico compartilhado dos dois).
 function ContasCasaLista({ itens, bills, sharedPurchases, onTogglePaid, onToggleSharedPurchasePaid, onSetGroupPaid }) {
-  // O total aqui é o que AINDA falta pagar — desconta o que já foi
-  // marcado como pago, mas sem mudar o `part` de cada item (a divisão em
-  // si fica igual o mês inteiro; só esse desconto muda).
-  const total = itens.reduce((s, i) => {
+  // O total é sempre o valor cheio da parte dessa pessoa — pagar não faz
+  // o gasto sumir. O que já foi pago aparece do lado, como "falta X".
+  const total = itens.reduce((s, i) => s + i.part, 0);
+  const pago = itens.reduce((s, i) => {
     const pagamento = resolverPagamento(i.id, bills, sharedPurchases);
-    const pago = Math.min(i.part, pagamento?.valorPago || 0);
-    return s + (i.part - pago);
+    return s + Math.min(i.part, pagamento?.valorPago || 0);
   }, 0);
+  const falta = Math.max(0, total - pago);
 
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontSize: 12.5, color: color.textMedium }}>Parte das contas de casa</span>
-        <span style={{ fontSize: 12.5, color: color.textMedium }}>{brl(total)}</span>
+        <span style={{ fontSize: 12.5, color: color.textMedium }}>
+          {brl(total)}
+          {pago > 0 && (
+            <span style={{ color: color.accentLight }}> · falta {brl(falta)}</span>
+          )}
+        </span>
       </div>
       {itens.length === 0 ? (
         <div style={{ fontSize: 13, color: color.textWeak }}>Nenhuma conta ainda.</div>
@@ -596,19 +606,25 @@ export default function Profile({
   const variaveis = personal[person]?.variable || [];
   const partesCasa = contasCasa || [];
 
-  // Desconta o que já foi marcado como pago (contas fixas ou compras de
-  // cartão) do total — mas sem recalcular a divisão em si, que fica
-  // travada o mês inteiro (ver nota em src/lib/commitments.js).
-  const gastoCasaTotal = partesCasa.reduce((s, i) => {
-    const pagamento = resolverPagamento(i.id, bills, sharedPurchases);
-    const pago = Math.min(i.part, pagamento?.valorPago || 0);
-    return s + (i.part - pago);
-  }, 0);
-  // Contas/gastos já marcados como pago não entram mais no "gasto real do
-  // mês" — já foram resolvidos, mesma lógica das compras de cartão pagas.
-  const gastoFixasTotal = fixas.filter((i) => !i.paid).reduce((s, i) => s + i.value, 0);
-  const gastoVariaveisTotal = variaveis.filter((i) => !i.paid).reduce((s, i) => s + i.value, 0);
+  // GASTO x AINDA FALTA PAGAR são duas coisas diferentes, e é importante
+  // não misturar: pagar uma conta não faz o dinheiro voltar. O gasto do
+  // mês (e, por consequência, a sobra da renda) é sempre o total, pago ou
+  // não. O que muda quando você marca algo como pago é só quanto ainda
+  // falta sair do bolso daqui pra frente.
+  const gastoCasaTotal = partesCasa.reduce((s, i) => s + i.part, 0);
+  const gastoFixasTotal = fixas.reduce((s, i) => s + i.value, 0);
+  const gastoVariaveisTotal = variaveis.reduce((s, i) => s + i.value, 0);
   const gastoReal = gastoCasaTotal + gastoFixasTotal + gastoVariaveisTotal;
+
+  // Quanto desse gasto já foi quitado (marcado como pago).
+  const pagoCasa = partesCasa.reduce((s, i) => {
+    const pagamento = resolverPagamento(i.id, bills, sharedPurchases);
+    return s + Math.min(i.part, pagamento?.valorPago || 0);
+  }, 0);
+  const pagoFixas = fixas.filter((i) => i.paid).reduce((s, i) => s + i.value, 0);
+  const pagoVariaveis = variaveis.filter((i) => i.paid).reduce((s, i) => s + i.value, 0);
+  const jaPago = pagoCasa + pagoFixas + pagoVariaveis;
+  const faltaPagar = Math.max(0, gastoReal - jaPago);
 
   const sobra = rendaTotal - gastoReal;
   const pctComprometida = rendaTotal > 0 ? Math.min(100, (gastoReal / rendaTotal) * 100) : 0;
@@ -776,6 +792,13 @@ export default function Profile({
           {sobra >= 0 ? `Sobra ${brl(sobra)} da renda` : `Falta ${brl(Math.abs(sobra))} — passa da renda`}
         </div>
         <div style={{ fontSize: 12.5, color: color.textMedium }}>{pctComprometida.toFixed(0)}% da renda comprometida</div>
+        {jaPago > 0 && (
+          <div style={{ fontSize: 12.5, color: color.accentLight, marginTop: 6 }}>
+            {faltaPagar > 0
+              ? `Já pagou ${brl(jaPago)} — ainda falta pagar ${brl(faltaPagar)}`
+              : `Tudo pago este mês (${brl(jaPago)})`}
+          </div>
+        )}
       </div>
 
       <ContasCasaLista

@@ -95,11 +95,11 @@ export default function App() {
 
   function gastoRealDe(pessoa) {
     const casa = splitResult[pessoa].reduce((s, i) => s + i.part, 0);
-    // Contas/gastos pessoais já marcados como pago não entram mais no
-    // total — já foram resolvidos, igual as compras de cartão marcadas
-    // como pagas.
-    const fixas = state.personal[pessoa].fixed.filter((i) => !i.paid).reduce((s, i) => s + i.value, 0);
-    const variaveis = state.personal[pessoa].variable.filter((i) => !i.paid).reduce((s, i) => s + i.value, 0);
+    // Conta tudo, pago ou não: "gasto real" é quanto a pessoa gastou no
+    // mês — pagar uma conta não faz o dinheiro voltar. O que já foi pago
+    // aparece separado, como "ainda falta pagar", no Perfil.
+    const fixas = state.personal[pessoa].fixed.reduce((s, i) => s + i.value, 0);
+    const variaveis = state.personal[pessoa].variable.reduce((s, i) => s + i.value, 0);
     return casa + fixas + variaveis;
   }
 
