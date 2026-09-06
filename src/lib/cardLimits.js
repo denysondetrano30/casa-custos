@@ -6,8 +6,26 @@
 import { buildFutureMonths } from './futureBills';
 
 export function buildCardUsage(state, cardId) {
-  const comprasDoCartao = (state.sharedPurchases || []).filter((p) => (p.cardId || null) === cardId);
-  const faturaDesteMes = comprasDoCartao.reduce((s, p) => s + p.value, 0);
+  // Só conta o que ainda NÃO foi pago: quando você adianta o pagamento de
+  // uma compra (marcando ela como paga em Contas ou no Perfil), aquele
+  // limite volta a ficar livre — que é como o cartão funciona de verdade.
+  const comprasDoCartao = (state.sharedPurchases || []).filter(
+    (p) => (p.cardId || null) === cardId && !p.paid
+  );
+
+  // Gastos pessoais dos dois lançados nesse cartão também ocupam limite:
+  // é o mesmo cartão físico, mesmo que na Divisão eles sejam só de quem
+  // gastou e nunca entrem na fatura dividida da casa.
+  const pessoaisDoCartao = ['Rui', 'Ana']
+    .flatMap((pessoa) => [
+      ...(state.personal?.[pessoa]?.fixed || []),
+      ...(state.personal?.[pessoa]?.variable || []),
+    ])
+    .filter((i) => (i.cardId || null) === cardId && !i.paid);
+
+  const faturaDesteMes =
+    comprasDoCartao.reduce((s, p) => s + p.value, 0) +
+    pessoaisDoCartao.reduce((s, i) => s + i.value, 0);
 
   // A parcela deste mês de cada parcelamento já está contada acima (ela
   // vira uma compra conjunta no mês em que é lançada) — pra não contar

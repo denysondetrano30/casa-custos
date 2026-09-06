@@ -22,6 +22,7 @@ import { buildCommitments } from './lib/commitments';
 import { splitBills } from './lib/split';
 import { buildSnapshot, resetForNextMonth } from './lib/monthClose';
 import { hashPin } from './lib/security';
+import { pagamentoFromOpcao, textoPagamento } from './lib/paymentMethods';
 
 const CHAVE_DESBLOQUEADO = 'casa:desbloqueado';
 
@@ -104,10 +105,14 @@ export default function App() {
   }
 
   function handleSaveEntry(payload) {
-    const { addType, value, cat, payer, desc, addPerson, pcat, addRecurring, addName, addDue, contaCat, rendaKind } = payload;
+    const { addType, value, cat, payer, desc, addPerson, pcat, addRecurring, addName, addDue, contaCat, rendaKind, pagamentoId } = payload;
+    // Onde o gasto foi pago (cartão X, débito, pix...) — ver
+    // src/lib/paymentMethods.js. Cartão nasce pendente, o resto nasce pago.
+    const pagamento = pagamentoFromOpcao(pagamentoId);
 
     setState((prev) => {
       if (addType === 'casa') {
+        const ondeFoi = textoPagamento(pagamento, prev.cards || []);
         return {
           ...prev,
           cats: prev.cats.map((c) => (c.id === cat ? { ...c, spent: c.spent + value } : c)),
@@ -117,8 +122,10 @@ export default function App() {
               desc: desc || prev.cats.find((c) => c.id === cat)?.name || 'Gasto',
               icon: prev.cats.find((c) => c.id === cat)?.icon,
               catId: cat,
-              meta: `${payer} · hoje`,
+              meta: `${payer} · hoje${ondeFoi ? ` · ${ondeFoi}` : ''}`,
               value,
+              metodo: pagamento.metodo,
+              cardId: pagamento.cardId,
             },
             ...prev.txs,
           ],
@@ -135,7 +142,14 @@ export default function App() {
               ...prev.personal[addPerson],
               [bucket]: [
                 ...prev.personal[addPerson][bucket],
-                { id: Date.now(), name: desc || pcat, value, paid: false },
+                {
+                  id: Date.now(),
+                  name: desc || pcat,
+                  value,
+                  paid: pagamento.paid,
+                  metodo: pagamento.metodo,
+                  cardId: pagamento.cardId,
+                },
               ],
             },
           },
@@ -773,6 +787,7 @@ export default function App() {
         onRemovePin={removePinPessoa}
         bills={state.bills}
         sharedPurchases={state.sharedPurchases}
+        cards={state.cards || []}
         onTogglePaid={togglePaid}
         onToggleSharedPurchasePaid={toggleSharedPurchasePaid}
         onSetGroupPaid={setSharedPurchasesPaidBulk}
@@ -792,6 +807,7 @@ export default function App() {
           personalCategories={state.personalCategories}
           onAddPersonalCategory={addPersonalCategory}
           cats={state.cats}
+          cards={state.cards || []}
         />
       ) : importing ? (
         <ImportExtrato

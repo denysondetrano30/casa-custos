@@ -4,6 +4,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
+import { textoPagamento } from '../lib/paymentMethods';
 
 function Segmented({ value, onChange, options, labels }) {
   return (
@@ -70,7 +71,7 @@ function StepperButton({ children, onClick }) {
   );
 }
 
-function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem, onTogglePaid }) {
+function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem, onTogglePaid, cards = [] }) {
   // O total é sempre o valor cheio — pagar não faz o gasto sumir. O que
   // já foi pago vira o "falta X" ao lado.
   const total = itens.reduce((s, i) => s + (i.part ?? i.value), 0);
@@ -110,15 +111,22 @@ function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem, onToggle
                 ) : (
                   <Circle size={16} color={color.textWeak} />
                 ))}
-              <span
-                style={{
-                  flex: 1,
-                  color: item.paid ? color.textWeak : color.text,
-                  textDecoration: item.paid ? 'line-through' : 'none',
-                }}
-              >
-                {item.name}
-              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    color: item.paid ? color.textWeak : color.text,
+                    textDecoration: item.paid ? 'line-through' : 'none',
+                  }}
+                >
+                  {item.name}
+                </div>
+                {textoPagamento(item, cards) && (
+                  <div style={{ fontSize: 10.5, color: color.textWeak }}>
+                    {textoPagamento(item, cards)}
+                    {item.metodo === 'cartao' && !item.paid ? ' · ainda na fatura' : ''}
+                  </div>
+                )}
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span
                   style={{
@@ -593,6 +601,7 @@ export default function Profile({
   onRemovePin,
   bills = [],
   sharedPurchases = [],
+  cards = [],
   onTogglePaid,
   onToggleSharedPurchasePaid,
   onSetGroupPaid,
@@ -827,6 +836,7 @@ export default function Profile({
         }}
         onDeleteItem={(id) => onDeletePersonalItem(person, 'fixed', id)}
         onTogglePaid={onTogglePersonalItemPaid ? (item) => onTogglePersonalItemPaid(person, 'fixed', item.id) : null}
+        cards={cards}
       />
       <ListaValores
         titulo="Gastos pessoais variáveis"
@@ -846,6 +856,7 @@ export default function Profile({
         }}
         onDeleteItem={(id) => onDeletePersonalItem(person, 'variable', id)}
         onTogglePaid={onTogglePersonalItemPaid ? (item) => onTogglePersonalItemPaid(person, 'variable', item.id) : null}
+        cards={cards}
       />
 
       {onSetPin && (

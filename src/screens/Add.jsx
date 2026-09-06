@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { House, User, Receipt, TrendUp, Backspace, Plus } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
+import { opcoesPagamento } from '../lib/paymentMethods';
 
 const TYPES = [
   { id: 'casa', label: 'Casa', Icon: House },
@@ -72,9 +73,15 @@ export default function Add({
   personalCategories = ['Streaming', 'Academia', 'Assinaturas', 'Cabeleireiro', 'Cursos'],
   onAddPersonalCategory,
   cats = [],
+  cards = [],
 }) {
   const [addType, setAddType] = useState('casa');
   const [raw, setRaw] = useState('');
+
+  // Onde o gasto foi pago: um dos cartões cadastrados (aí fica pendente
+  // na fatura) ou débito/pix/dinheiro (aí já sai como pago).
+  const pagamentos = opcoesPagamento(cards);
+  const [pagamentoId, setPagamentoId] = useState(pagamentos[0]?.id || 'debito');
 
   const [cat, setCat] = useState(cats[0]?.id || '');
   const [payer, setPayer] = useState('Ana');
@@ -99,9 +106,17 @@ export default function Add({
     setRaw((r) => r.slice(0, -1));
   }
 
+  const pagamentoEscolhido = pagamentos.find((p) => p.id === pagamentoId);
+  const textoOnde = pagamentoEscolhido
+    ? pagamentoEscolhido.ehCartao
+      ? `no cartão ${pagamentoEscolhido.label}`
+      : `no ${pagamentoEscolhido.label.toLowerCase()}`
+    : '';
+
   function hint() {
-    if (addType === 'casa') return `${cats.find((c) => c.id === cat)?.name || ''} · pago por ${names[payer]}`;
-    if (addType === 'pessoal') return `${pcat} · ${names[addPerson]} · ${addRecurring ? 'repete todo mês' : 'só neste mês'}`;
+    if (addType === 'casa') return `${cats.find((c) => c.id === cat)?.name || ''} · pago por ${names[payer]} · ${textoOnde}`;
+    if (addType === 'pessoal')
+      return `${pcat} · ${names[addPerson]} · ${addRecurring ? 'repete todo mês' : 'só neste mês'} · ${textoOnde}`;
     if (addType === 'conta') {
       const nomeCat = cats.find((c) => c.id === contaCat)?.name;
       return `${nomeCat ? nomeCat + ' · ' : ''}${addDue ? `vence dia ${addDue}` : 'defina o dia de vencimento'}`;
@@ -118,9 +133,28 @@ export default function Add({
 
   function handleSave() {
     if (!canSave()) return;
-    const payload = { addType, value, cat, payer, desc, addPerson, pcat, addRecurring, addName, addDue, contaCat, rendaKind };
+    const payload = { addType, value, cat, payer, desc, addPerson, pcat, addRecurring, addName, addDue, contaCat, rendaKind, pagamentoId };
     onSave(payload);
   }
+
+  // Campo "Onde foi pago", usado tanto no gasto de casa quanto no pessoal.
+  const campoOndeFoiPago = (
+    <Field label="Onde foi pago">
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {pagamentos.map((p) => (
+          <Chip key={p.id} active={pagamentoId === p.id} onClick={() => setPagamentoId(p.id)}>
+            {p.label}
+          </Chip>
+        ))}
+      </div>
+      <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6, lineHeight: 1.5 }}>
+        {pagamentoEscolhido?.ehCartao
+          ? 'Vai ficar pendente na fatura desse cartão e ocupando limite até você marcar como pago.'
+          : 'Já sai como pago, porque o dinheiro saiu da conta na hora.'}
+        {cards.length === 0 && ' Cadastre seus cartões em Contas → Cartões pra escolher um aqui.'}
+      </div>
+    </Field>
+  );
 
   return (
     <div style={{ padding: '64px 20px 40px', minHeight: '100vh' }}>
@@ -195,6 +229,7 @@ export default function Add({
               ))}
             </div>
           </Field>
+          {campoOndeFoiPago}
           <Field label="Descrição">
             <TextInput value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Ex. Mercado" />
           </Field>
@@ -253,6 +288,7 @@ export default function Add({
               <Chip active={!addRecurring} onClick={() => setAddRecurring(false)}>Só neste mês</Chip>
             </div>
           </Field>
+          {campoOndeFoiPago}
           <Field label="Descrição">
             <TextInput value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Ex. Academia" />
           </Field>
