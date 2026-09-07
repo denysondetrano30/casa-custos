@@ -205,6 +205,7 @@ function resolverPagamento(itemId, bills, sharedPurchases) {
       paid: itens.every((p) => p.paid),
       valorPago,
       tipo: 'cartaoGroup',
+      cardId: chave,
       ids: itens.map((p) => p.id),
       qtd: itens.length,
     };
@@ -263,7 +264,8 @@ function ContasCasaLista({ itens, bills, sharedPurchases, onTogglePaid, onToggle
                   if (!pagamento) return;
                   if (pagamento.tipo === 'bill' && onTogglePaid) onTogglePaid(pagamento.realId);
                   if (pagamento.tipo === 'shared' && onToggleSharedPurchasePaid) onToggleSharedPurchasePaid(pagamento.realId);
-                  if (pagamento.tipo === 'cartaoGroup' && onSetGroupPaid) onSetGroupPaid(pagamento.ids, !pagamento.paid);
+                  if (pagamento.tipo === 'cartaoGroup' && onSetGroupPaid)
+                    onSetGroupPaid(pagamento.ids, !pagamento.paid, pagamento.cardId);
                 }}
                 style={{
                   display: 'flex',

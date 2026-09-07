@@ -494,6 +494,22 @@ export default function App() {
       cards: (prev.cards || []).filter((c) => c.id !== id),
       // As compras/parcelas que estavam nesse cartão não são apagadas —
       // só voltam a ficar sem cartão identificado (fatura geral).
+      // Os gastos pessoais também apontavam pro cartão apagado e ficavam
+      // órfãos: nunca mais eram quitados junto com fatura nenhuma.
+      personal: prev.personal
+        ? {
+            Rui: {
+              ...prev.personal.Rui,
+              fixed: (prev.personal.Rui.fixed || []).map((i) => (i.cardId === id ? { ...i, cardId: null } : i)),
+              variable: (prev.personal.Rui.variable || []).map((i) => (i.cardId === id ? { ...i, cardId: null } : i)),
+            },
+            Ana: {
+              ...prev.personal.Ana,
+              fixed: (prev.personal.Ana.fixed || []).map((i) => (i.cardId === id ? { ...i, cardId: null } : i)),
+              variable: (prev.personal.Ana.variable || []).map((i) => (i.cardId === id ? { ...i, cardId: null } : i)),
+            },
+          }
+        : prev.personal,
       sharedPurchases: (prev.sharedPurchases || []).map((p) => (p.cardId === id ? { ...p, cardId: null } : p)),
       installments: (prev.installments || []).map((i) => (i.cardId === id ? { ...i, cardId: null } : i)),
     }));
@@ -530,7 +546,17 @@ export default function App() {
               ...personal[it.classificacao],
               variable: [
                 ...personal[it.classificacao].variable,
-                { id: Date.now() + Math.random(), name: it.desc, value: it.value },
+                {
+                  id: Date.now() + Math.random(),
+                  name: it.desc,
+                  value: it.value,
+                  // Veio da fatura de um cartão: nasce pendente e ligado
+                  // àquele cartão, igual a um gasto pessoal lançado à mão.
+                  // Antes perdia tudo isso e não segurava limite nenhum.
+                  metodo: it.cardId ? 'cartao' : null,
+                  cardId: it.cardId || null,
+                  paid: false,
+                },
               ],
             },
           };
@@ -626,12 +652,38 @@ export default function App() {
 
   // Marca de uma vez várias compras (todas as de uma fatura de cartão
   // agrupada) como pagas ou não — porque a fatura é paga numa cobrança só,
-  // não compra por compra.
-  function setSharedPurchasesPaidBulk(ids, paid) {
-    setState((prev) => ({
-      ...prev,
-      sharedPurchases: (prev.sharedPurchases || []).map((p) => (ids.includes(p.id) ? { ...p, paid } : p)),
-    }));
+  // não compra por compra. Junto vão os gastos PESSOAIS lançados no mesmo
+  // cartão: eles saem na mesma cobrança, então continuar cobrando "ainda
+  // falta pagar" (e segurando limite) depois da fatura paga estava errado.
+  function setSharedPurchasesPaidBulk(ids, paid, cardId) {
+    setState((prev) => {
+      // Só ao QUITAR a fatura os gastos pessoais são marcados junto.
+      // Desmarcar não desfaz: um gasto pessoal pode ter sido pago à parte
+      // (adiantado), e apagar essa marcação seria perder informação que a
+      // pessoa registrou de propósito.
+      const marcarPessoais = (lista) =>
+        (lista || []).map((i) =>
+          i.metodo === 'cartao' && i.cardId && i.cardId === cardId ? { ...i, paid: true } : i
+        );
+      return {
+        ...prev,
+        sharedPurchases: (prev.sharedPurchases || []).map((p) => (ids.includes(p.id) ? { ...p, paid } : p)),
+        personal: !paid || !cardId || cardId === '_geral' || !prev.personal
+          ? prev.personal
+          : {
+              Rui: {
+                ...prev.personal.Rui,
+                fixed: marcarPessoais(prev.personal.Rui.fixed),
+                variable: marcarPessoais(prev.personal.Rui.variable),
+              },
+              Ana: {
+                ...prev.personal.Ana,
+                fixed: marcarPessoais(prev.personal.Ana.fixed),
+                variable: marcarPessoais(prev.personal.Ana.variable),
+              },
+            },
+      };
+    });
   }
 
   // Recebimentos PJ (declaração anual) — só um histórico manual, não entra
@@ -782,6 +834,7 @@ export default function App() {
         state={state}
         onEditBill={editBill}
         onDeleteBill={deleteBill}
+        onTogglePaid={togglePaid}
         onDeleteSharedPurchase={deleteSharedPurchase}
         onEditSharedPurchaseCategory={editSharedPurchaseCategory}
         onToggleSharedPurchasePaid={toggleSharedPurchasePaid}
@@ -832,7 +885,7 @@ export default function App() {
         outroGastoReal={gastoRealDe(outraPessoa[profilePerson])}
         onUpdateIncome={updateIncome}
         onRemoveExtra={removeExtra}
-        onRegistrarExtra={(pessoa) => setAdding({ person: pessoa })}
+        onRegistrarExtra={(pessoa) => setAdding({ person: pessoa, tipo: 'renda', rendaKind: 'extra' })}
         houseId={houseId}
         names={names}
         onUpdateName={updateName}
@@ -865,6 +918,8 @@ export default function App() {
           onClose={() => setAdding(null)}
           onSave={handleSaveEntry}
           initialPerson={adding.person}
+          initialType={adding.tipo}
+          initialRendaKind={adding.rendaKind}
           names={names}
           personalCategories={state.personalCategories}
           onAddPersonalCategory={addPersonalCategory}
@@ -875,6 +930,14 @@ export default function App() {
         <ImportExtrato
           cats={state.cats}
           cards={state.cards || []}
+          jaLancadas={[
+            ...(state.sharedPurchases || []),
+            // Compras marcadas como pessoais também já foram lançadas —
+            // sem elas aqui, reimportar o extrato duplicava os gastos
+            // pessoais em silêncio.
+            ...(state.personal?.Rui?.variable || []),
+            ...(state.personal?.Ana?.variable || []),
+          ]}
           names={names}
           onClose={() => setImporting(false)}
           onConfirm={(items) => {

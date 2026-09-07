@@ -4,6 +4,18 @@ import { color, radius } from '../lib/tokens';
 import { brl, parseValor } from '../lib/format';
 import { parseExtratoCSV, guessCategory } from '../lib/importParsers';
 
+// Compara nomes ignorando maiúsculas, acentos e o sufixo de parcela que
+// o app acrescenta ao salvar — senão a mesma compra nunca se reconhece.
+function normalizarNome(nome) {
+  return String(nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s*·\s*parcela\s*\d{1,2}\s*\/\s*\d{1,2}\s*/i, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
 const inputStyle = {
   width: '100%',
   background: color.surface,
@@ -118,7 +130,7 @@ function Chip({ active, children, onClick, small }) {
 // Tela de "Importar extrato": a pessoa cola ou sobe o CSV baixado do banco,
 // a gente lê e sugere uma categoria pra cada compra, e ela só confirma ou
 // corrige antes de lançar tudo de uma vez.
-export default function ImportExtrato({ cats, cards = [], names, onClose, onConfirm }) {
+export default function ImportExtrato({ cats, cards = [], names, jaLancadas = [], onClose, onConfirm }) {
   const [rawText, setRawText] = useState('');
   const [items, setItems] = useState(null); // null = ainda não leu/lançou nada
   const [erro, setErro] = useState('');
@@ -141,17 +153,38 @@ export default function ImportExtrato({ cats, cards = [], names, onClose, onConf
       setErro('Não consegui achar nenhuma compra nesse arquivo. Confira se é o CSV certo (não o PDF da fatura).');
       return;
     }
+    // Reimportar o mesmo extrato (ou o do mês seguinte, que repete as
+    // compras antigas) duplicava tudo em silêncio: o gasto do mês dobrava
+    // e a divisão era recalculada em cima do dobro. Agora a gente
+    // reconhece o que já está lançado neste mês e já deixa marcado como
+    // "Ignorar" — quem quiser lançar mesmo assim é só tocar em "Casa".
+    // Conta quantas vezes cada compra já existe, em vez de só marcar que
+    // existe: com dois cafés de R$ 10 no mês e um só já lançado, apenas o
+    // primeiro do arquivo é marcado como repetido — o segundo é uma
+    // compra nova de verdade e entra normal.
+    const restantes = new Map();
+    for (const p of jaLancadas || []) {
+      const k = `${normalizarNome(p.name)}|${Math.round((p.value || 0) * 100)}`;
+      restantes.set(k, (restantes.get(k) || 0) + 1);
+    }
+
     setItems((prev) => [
       ...(prev || []),
-      ...parsed.map((it) => ({
+      ...parsed.map((it) => {
+        const k = `${normalizarNome(it.desc)}|${Math.round(it.value * 100)}`;
+        const repetida = (restantes.get(k) || 0) > 0;
+        if (repetida) restantes.set(k, restantes.get(k) - 1);
+        return {
         ...it,
-        classificacao: 'casa',
+        jaExiste: repetida,
+        classificacao: repetida ? 'ignorar' : 'casa',
         // Quando o app não reconhece o estabelecimento, deixa sem categoria
         // (não chuta "Mercado" só porque é a primeira da lista) — senão
         // toda compra não reconhecida (Uber, farmácia, loja qualquer) cai
         // errado dentro de Mercado, tanto no "Onde foi" quanto na Divisão.
         category: guessCategory(it.desc, cats) || '',
-      })),
+        };
+      }),
     ]);
   }
 
@@ -186,7 +219,10 @@ export default function ImportExtrato({ cats, cards = [], names, onClose, onConf
   }
 
   function atualizarItem(id, dados) {
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...dados } : it)));
+    // Mudar a classificação à mão desfaz a marca de "já lançada" — foi a
+    // pessoa que decidiu que aquela é uma compra nova.
+    const limpaMarca = dados.classificacao && dados.classificacao !== 'ignorar' ? { jaExiste: false } : {};
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...dados, ...limpaMarca } : it)));
   }
 
   function removerItem(id) {
@@ -287,6 +323,27 @@ export default function ImportExtrato({ cats, cards = [], names, onClose, onConf
 
       {items !== null && (
         <>
+          {items.some((it) => it.jaExiste) && (
+            <div
+              style={{
+                borderRadius: radius.card,
+                padding: 12,
+                background: color.surfaceInset,
+                border: `1px solid ${color.chart[2]}`,
+                marginBottom: 14,
+                fontSize: 12,
+                color: color.accentLight,
+                lineHeight: 1.5,
+              }}
+            >
+              {items.filter((it) => it.jaExiste).length}{' '}
+              {items.filter((it) => it.jaExiste).length === 1
+                ? 'compra já parece estar lançada neste mês e foi marcada como Ignorar'
+                : 'compras já parecem estar lançadas neste mês e foram marcadas como Ignorar'}
+              . Se alguma for uma compra nova de mesmo nome e valor, é só tocar em "Casa" nela.
+            </div>
+          )}
+
           <div style={{ fontSize: 12, color: color.textMedium, marginBottom: 16 }}>
             Achei {items.length} {items.length === 1 ? 'compra' : 'compras'}. Confira a classificação de cada uma antes
             de importar — o app só chuta a categoria, quem sabe é você.
@@ -308,7 +365,7 @@ export default function ImportExtrato({ cats, cards = [], names, onClose, onConf
                 ))}
               </div>
               <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6 }}>
-                Isso é só pra acompanhar o limite do cartão em Contas → Cartões — não muda a divisão de ninguém.
+                Vale pra fatura e pro limite desse cartão em Contas → Cartões. A divisão entre vocês não muda por causa disso.
               </div>
             </div>
           )}
@@ -332,6 +389,7 @@ export default function ImportExtrato({ cats, cards = [], names, onClose, onConf
                     <div style={{ fontSize: 10.5, color: color.textWeak }}>
                       {it.date || 'lançada na mão'}
                       {it.parcelaTotal ? ` · parcela ${it.parcelaAtual}/${it.parcelaTotal}` : ''}
+                      {it.jaExiste ? ' · já lançada neste mês' : ''}
                     </div>
                   </div>
                   <span style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
@@ -397,7 +455,7 @@ export default function ImportExtrato({ cats, cards = [], names, onClose, onConf
 
           <button
             onClick={() =>
-              onConfirm(items.map((it) => (it.classificacao === 'casa' ? { ...it, cardId } : it)))
+              onConfirm(items.map((it) => (it.classificacao === 'ignorar' ? it : { ...it, cardId })))
             }
             disabled={totalSelecionado === 0}
             style={{

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Lock as LockIcon } from '@phosphor-icons/react';
+import { signOut } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 import { color } from '../lib/tokens';
 import { hashPin } from '../lib/security';
 
@@ -133,9 +135,35 @@ export default function Lock({ pins, onUnlock }) {
         </button>
       </div>
 
-      <div style={{ fontSize: 11, color: color.textWeak, marginTop: 30, maxWidth: 260, textAlign: 'center', lineHeight: 1.5 }}>
-        A senha é combinada entre vocês dois e pode ser trocada no Perfil.
+      <div style={{ fontSize: 11, color: color.textWeak, marginTop: 30, maxWidth: 280, textAlign: 'center', lineHeight: 1.6 }}>
+        Cada um tem a própria senha, e qualquer uma das duas abre o app. Esqueceu a sua? Peça pra outra pessoa digitar
+        a dela — depois é só trocar a sua em Perfil → Segurança.
       </div>
+
+      {/* Antes daqui só saía digitando a senha certa: quem esquecesse
+          ficava preso numa tela sem nenhuma saída. */}
+      <button
+        onClick={() => {
+          if (
+            window.confirm(
+              'Sair da conta? Seus dados continuam salvos — você volta pra tela de login e pode entrar de novo com a mesma conta do Google.'
+            )
+          ) {
+            signOut(auth);
+          }
+        }}
+        style={{
+          marginTop: 18,
+          background: 'transparent',
+          border: 'none',
+          color: color.textMedium,
+          fontSize: 12.5,
+          cursor: 'pointer',
+          textDecoration: 'underline',
+        }}
+      >
+        Sair da conta
+      </button>
     </div>
   );
 }

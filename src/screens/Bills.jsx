@@ -54,6 +54,7 @@ function EstesMes({
   sharedPurchases = [],
   onEditBill,
   onDeleteBill,
+  onTogglePaid,
   onDeleteSharedPurchase,
   onEditSharedPurchaseCategory,
   onToggleSharedPurchasePaid,
@@ -253,7 +254,9 @@ function EstesMes({
               {porSemana[semana].map((b) => (
                 <div
                   key={b.id}
+                  onClick={() => onTogglePaid && onTogglePaid(b.id)}
                   style={{
+                    cursor: onTogglePaid ? 'pointer' : 'default',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 10,
@@ -294,7 +297,15 @@ function EstesMes({
                         window.alert('Alguma dessas respostas não é válida. Tente de novo.');
                         return;
                       }
-                      onEditBill(b.id, { name: novoNome.trim(), due: Number(novoDia) || b.due, value: novoValor });
+                      // O dia precisa ser válido aqui também: por este
+                      // caminho dava pra gravar "dia 45", que nunca vence
+                      // e bagunça o agrupamento por semana.
+                      const dia = Number(novoDia);
+                      if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
+                        window.alert('O dia de vencimento tem que ser um número entre 1 e 31.');
+                        return;
+                      }
+                      onEditBill(b.id, { name: novoNome.trim(), due: dia, value: novoValor });
                     }}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
                     aria-label={`Editar ${b.name}`}
@@ -807,6 +818,7 @@ export default function Bills({
   state,
   onEditBill,
   onDeleteBill,
+  onTogglePaid,
   onDeleteSharedPurchase,
   onEditSharedPurchaseCategory,
   onToggleSharedPurchasePaid,
@@ -847,6 +859,7 @@ export default function Bills({
           sharedPurchases={state.sharedPurchases || []}
           onEditBill={onEditBill}
           onDeleteBill={onDeleteBill}
+          onTogglePaid={onTogglePaid}
           onDeleteSharedPurchase={onDeleteSharedPurchase}
           onEditSharedPurchaseCategory={onEditSharedPurchaseCategory}
           onToggleSharedPurchasePaid={onToggleSharedPurchasePaid}

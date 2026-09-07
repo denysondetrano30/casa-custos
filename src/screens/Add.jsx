@@ -69,13 +69,15 @@ export default function Add({
   onClose,
   onSave,
   initialPerson,
+  initialType,
+  initialRendaKind,
   names = { Rui: 'Rui', Ana: 'Ana' },
   personalCategories = ['Streaming', 'Academia', 'Assinaturas', 'Cabeleireiro', 'Cursos'],
   onAddPersonalCategory,
   cats = [],
   cards = [],
 }) {
-  const [addType, setAddType] = useState('casa');
+  const [addType, setAddType] = useState(initialType || 'casa');
   const [raw, setRaw] = useState('');
 
   // Onde o gasto foi pago: um dos cartões cadastrados (aí fica pendente
@@ -95,7 +97,7 @@ export default function Add({
   const [addDue, setAddDue] = useState('');
   const [contaCat, setContaCat] = useState(cats[0]?.id || '');
 
-  const [rendaKind, setRendaKind] = useState('fixa');
+  const [rendaKind, setRendaKind] = useState(initialRendaKind || 'fixa');
 
   const value = Number(raw || '0') / 100;
 
@@ -127,7 +129,10 @@ export default function Add({
 
   function canSave() {
     if (value <= 0) return false;
-    if (addType === 'conta') return addName.trim() !== '' && addDue !== '';
+    if (addType === 'conta') {
+      const dia = Number(addDue);
+      return addName.trim() !== '' && Number.isInteger(dia) && dia >= 1 && dia <= 31;
+    }
     return true;
   }
 
@@ -320,6 +325,11 @@ export default function Add({
               onChange={(e) => setAddDue(e.target.value)}
               placeholder="Ex. 25"
             />
+            {addDue !== '' && !(Number(addDue) >= 1 && Number(addDue) <= 31) && (
+              <div style={{ fontSize: 11, color: color.alertText, marginTop: 6 }}>
+                O dia de vencimento tem que ser entre 1 e 31.
+              </div>
+            )}
           </Field>
         </>
       )}

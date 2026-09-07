@@ -96,6 +96,15 @@ export function buildSnapshot(state, splitResult) {
   };
 }
 
+// No mês novo, a conta fixa volta a ficar pendente — a não ser que ela
+// seja paga por um meio que sai sozinho da conta (débito, pix, dinheiro),
+// caso em que ela já nasce paga de novo. Só o que fica na fatura do
+// cartão é que precisa ser marcado à mão.
+function renovarPagamento(item) {
+  const saiSozinho = item.metodo && item.metodo !== 'cartao';
+  return { ...item, paid: !!saiSozinho };
+}
+
 // Devolve o novo estado: histórico com o mês fechado guardado, e tudo que
 // é "deste mês" zerado pro mês que está começando.
 export function resetForNextMonth(state, snapshot) {
@@ -112,6 +121,11 @@ export function resetForNextMonth(state, snapshot) {
     // pendente até ser paga de novo.
     bills: state.bills.map((b) => ({ ...b, paid: false })),
     sharedPurchases: [],
+    // As compras registradas na Feira são deste mês: no mês novo a lista
+    // começa limpa. Antes elas ficavam lá para sempre e, pior, apagar uma
+    // delas descontava do Mercado do mês ATUAL um valor gasto no anterior.
+    purchases: [],
+    shop: { ...(state.shop || {}), items: [] },
     // Passou um mês: cada parcelamento em aberto andou uma parcela. Os que
     // chegaram na última somem da lista — estão quitados. Antes disso, o
     // contador nunca avançava e "parcela 1 de 12" ficava para sempre,
@@ -124,13 +138,15 @@ export function resetForNextMonth(state, snapshot) {
         return { ...i, done: Math.min((i.done || 0) + 1, i.count) };
       })
       .filter((i) => !Number.isFinite(i.count) || i.count <= 0 || i.done < i.count),
-    // Contas pessoais fixas continuam existindo (são recorrentes) e o
-    // "pago" delas volta a ficar pendente, igual as contas de casa. Os
-    // gastos pessoais variáveis são pontuais desse mês, então somem
-    // inteiros — nem precisam resetar o "pago".
+    // Contas pessoais fixas continuam existindo (são recorrentes) e
+    // voltam a ficar pendentes — MENOS as que saem sozinhas da conta
+    // (débito automático, pix, dinheiro): essas já nascem pagas todo mês,
+    // e marcá-las como pendentes só enchia o "ainda falta pagar" de coisa
+    // que ninguém precisa lembrar de pagar. Os gastos pessoais variáveis
+    // são pontuais do mês, então somem inteiros.
     personal: {
-      Rui: { ...state.personal.Rui, fixed: state.personal.Rui.fixed.map((i) => ({ ...i, paid: false })), variable: [] },
-      Ana: { ...state.personal.Ana, fixed: state.personal.Ana.fixed.map((i) => ({ ...i, paid: false })), variable: [] },
+      Rui: { ...state.personal.Rui, fixed: state.personal.Rui.fixed.map(renovarPagamento), variable: [] },
+      Ana: { ...state.personal.Ana, fixed: state.personal.Ana.fixed.map(renovarPagamento), variable: [] },
     },
     extras: { Rui: [], Ana: [] },
     historico: [snapshot, ...(state.historico || [])],

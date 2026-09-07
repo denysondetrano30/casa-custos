@@ -1,4 +1,4 @@
-import { CaretLeft, CaretRight, DownloadSimple, PencilSimple, Trash } from '@phosphor-icons/react';
+import { DownloadSimple, PencilSimple, Trash } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl, parseValor } from '../lib/format';
 
@@ -18,11 +18,31 @@ function SectionLabel({ children }) {
   );
 }
 
+// O selo do topo era um texto fixo gravado no estado: dizia "no ritmo"
+// mesmo com 180% da renda comprometida, a alguns pixels da linha em
+// vermelho que dizia o contrário. Agora ele olha o número.
+function seloDoMes(pctGasto, pctHoje, rendaCasal, gastoTotal) {
+  // Sem renda cadastrada não dá pra dizer se está indo bem: o percentual
+  // é sempre 0 e o selo dizia "sobrando bem" logo acima de um valor
+  // estourado. Melhor pedir a renda do que inventar tranquilidade.
+  if (!rendaCasal) {
+    return gastoTotal > 0
+      ? { texto: 'falta cadastrar a renda', alerta: true }
+      : { texto: 'sem renda cadastrada', alerta: false };
+  }
+  if (pctGasto > 100) return { texto: 'passou da renda', alerta: true };
+  if (pctGasto === 100) return { texto: 'no limite', alerta: true };
+  if (pctGasto > pctHoje + 15) return { texto: 'gastando rápido', alerta: true };
+  if (pctGasto < pctHoje - 15) return { texto: 'sobrando bem', alerta: false };
+  return { texto: 'no ritmo', alerta: false };
+}
+
 function HeroCard({ month, gastoTotal, rendaCasal }) {
   const restante = rendaCasal - gastoTotal;
   const pctGasto = rendaCasal > 0 ? Math.min(100, (gastoTotal / rendaCasal) * 100) : 0;
   const pctHoje = (month.today / month.daysInMonth) * 100;
   const porDia = Math.max(0, restante) / Math.max(1, month.daysInMonth - month.today);
+  const selo = seloDoMes(pctGasto, pctHoje, rendaCasal, gastoTotal);
 
   return (
     <div
@@ -39,21 +59,21 @@ function HeroCard({ month, gastoTotal, rendaCasal }) {
           display: 'inline-block',
           padding: '4px 10px',
           borderRadius: 99,
-          border: `1px solid ${color.chart[2]}`,
+          border: `1px solid ${selo.alerta ? color.alertBar : color.chart[2]}`,
           fontSize: 11,
-          color: color.accentLight,
+          color: selo.alerta ? color.alertText : color.accentLight,
           marginBottom: 14,
         }}
       >
-        {month.status}
+        {selo.texto}
       </div>
 
       <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 4 }}>Gasto do mês</div>
       <div style={{ fontSize: 40, fontWeight: 500, letterSpacing: '-.03em', fontVariantNumeric: 'tabular-nums' }}>
         {brl(gastoTotal)}
       </div>
-      <div style={{ fontSize: 12.5, color: color.textMedium, marginTop: 4 }}>
-        Sobra {brl(restante)}
+      <div style={{ fontSize: 12.5, color: restante < 0 ? color.alertText : color.textMedium, marginTop: 4 }}>
+        {restante >= 0 ? `Sobra ${brl(restante)}` : `Passou ${brl(Math.abs(restante))} da renda`}
       </div>
       <div style={{ fontSize: 12.5, color: pctGasto >= 100 ? color.alertText : color.accentLight, marginTop: 2 }}>
         {pctGasto.toFixed(0)}% da renda do casal já está comprometida esse mês
@@ -345,11 +365,10 @@ export default function Home({ month, cats, txs, names = { Rui: 'Rui', Ana: 'Ana
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <CaretLeft size={16} color={color.textWeak} />
-          <span style={{ fontSize: 15, fontWeight: 500 }}>{month.label}</span>
-          <CaretRight size={16} color={color.textWeak} />
-        </div>
+        {/* As setas foram tiradas daqui: elas não navegavam entre meses
+            (o app não tem essa navegação) e davam a entender que sim.
+            Meses anteriores ficam em Contas → Histórico. */}
+        <span style={{ fontSize: 15, fontWeight: 500 }}>{month.label}</span>
         <div style={{ display: 'flex' }}>
           <div style={{ width: 28, height: 28, borderRadius: 99, background: color.chart[0], border: `1.5px solid ${color.bg}` }} />
           <div style={{ width: 28, height: 28, borderRadius: 99, background: color.chart[1], border: `1.5px solid ${color.bg}`, marginLeft: -8 }} />
