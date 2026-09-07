@@ -8,6 +8,7 @@
 // (contas pessoais fixas), goals, splitPct, names, personalCategories.
 
 import { commitmentIdForSharedPurchase } from './commitments';
+import { aplicarAportesDoMes, aporteMensalTotal } from './goals';
 
 const MESES_FULL = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -92,6 +93,9 @@ export function buildSnapshot(state, splitResult) {
     gastoTotalCasal,
     rendaCasal,
     personalVariableTotal,
+    // Usa o que o fechamento REALMENTE vai guardar (descontando as
+    // metas que já receberam aporte na mão), não a reserva teórica.
+    guardadoEmMetas: aplicarAportesDoMes(state.goals, state.month?.label).guardado,
     pendencias,
   };
 }
@@ -149,6 +153,10 @@ export function resetForNextMonth(state, snapshot) {
       Ana: { ...state.personal.Ana, fixed: state.personal.Ana.fixed.map(renovarPagamento), variable: [] },
     },
     extras: { Rui: [], Ana: [] },
+    // Fechar o mês faz as metas andarem: cada meta ativa recebe o aporte
+    // do mês. Antes era preciso lembrar de registrar aporte na mão, todo
+    // mês, sem nenhum lembrete — e a barra de progresso ficava em 0%.
+    goals: aplicarAportesDoMes(state.goals, state.month?.label).goals,
     historico: [snapshot, ...(state.historico || [])],
   };
 }

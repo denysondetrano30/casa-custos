@@ -158,9 +158,14 @@ function ProporcaoCard({ pctRui, onChangePctRui, income, total, names }) {
   );
 }
 
-function Coluna({ pessoa, nome, itens, income, avatarColor, names }) {
+function Coluna({ pessoa, nome, itens, income, avatarColor, names, gastoPessoal = 0, rendaDaPessoa }) {
   const soma = itens.reduce((s, i) => s + i.part, 0);
-  const sobra = income[pessoa] - soma;
+  // Mesma conta do Perfil: renda cheia (fixa + extras) menos a parte das
+  // contas de casa menos os gastos pessoais. Antes esta tela olhava só a
+  // renda fixa e só as contas de casa, e podia anunciar folga pra quem
+  // estava no vermelho no Perfil (ou o contrário).
+  const renda = rendaDaPessoa !== undefined ? rendaDaPessoa : income[pessoa];
+  const sobra = renda - soma - gastoPessoal;
 
   return (
     <div style={{ flex: 1 }}>
@@ -223,6 +228,8 @@ export default function Split({
   splitResult,
   totalCommitments,
   names = { Rui: 'Rui', Ana: 'Ana' },
+  gastoPessoal = { Rui: 0, Ana: 0 },
+  rendaTotalPorPessoa,
 }) {
   return (
     <div style={{ padding: '64px 20px 168px' }}>
@@ -233,8 +240,8 @@ export default function Split({
 
       <SectionLabel>Quem paga o quê — sugestão</SectionLabel>
       <div style={{ display: 'flex', gap: 14 }}>
-        <Coluna pessoa="Rui" nome={names.Rui} itens={splitResult.Rui} income={income} avatarColor={color.chart[0]} names={names} />
-        <Coluna pessoa="Ana" nome={names.Ana} itens={splitResult.Ana} income={income} avatarColor={color.chart[1]} names={names} />
+        <Coluna pessoa="Rui" nome={names.Rui} itens={splitResult.Rui} income={income} avatarColor={color.chart[0]} names={names} gastoPessoal={gastoPessoal.Rui} rendaDaPessoa={rendaTotalPorPessoa?.Rui} />
+        <Coluna pessoa="Ana" nome={names.Ana} itens={splitResult.Ana} income={income} avatarColor={color.chart[1]} names={names} gastoPessoal={gastoPessoal.Ana} rendaDaPessoa={rendaTotalPorPessoa?.Ana} />
       </div>
     </div>
   );

@@ -96,7 +96,11 @@ function EstesMes({
     ...bills.filter((b) => !b.paid).map((b) => ({ id: `bill-${b.id}`, name: b.name, value: b.value })),
     ...sharedPurchases
       .filter((p) => !p.paid)
-      .map((p) => ({ id: commitmentIdForSharedPurchase(p), name: p.name, value: p.value })),
+      // `chave` é o id do compromisso na divisão (a fatura), e várias
+      // compras do mesmo cartão compartilham ele — então a lista precisa
+      // de um id próprio por linha, senão duas compras do mesmo cartão
+      // brigam pela mesma posição e o React pode redesenhar a errada.
+      .map((p) => ({ id: `compra-${p.id}`, chave: commitmentIdForSharedPurchase(p), name: p.name, value: p.value })),
   ];
 
   return (
@@ -305,7 +309,24 @@ function EstesMes({
                         window.alert('O dia de vencimento tem que ser um número entre 1 e 31.');
                         return;
                       }
-                      onEditBill(b.id, { name: novoNome.trim(), due: dia, value: novoValor });
+                      // Categoria também: criada na errada, a conta ficava
+                      // errada pra sempre no "Onde foi" e no histórico.
+                      let categoria = b.category;
+                      if (cats.length > 0) {
+                        const opcoes = cats.map((c) => c.name).join(', ');
+                        const resp = window.prompt(
+                          `Categoria (opções: ${opcoes}). Deixe em branco pra tirar a categoria.`,
+                          cats.find((c) => c.id === b.category)?.name || ''
+                        );
+                        if (resp === null) return;
+                        const achada = cats.find((c) => c.name.toLowerCase() === resp.trim().toLowerCase());
+                        if (resp.trim() && !achada) {
+                          window.alert(`Não achei essa categoria. Escolha uma entre: ${opcoes}.`);
+                          return;
+                        }
+                        categoria = achada ? achada.id : null;
+                      }
+                      onEditBill(b.id, { name: novoNome.trim(), due: dia, value: novoValor, category: categoria });
                     }}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
                     aria-label={`Editar ${b.name}`}
@@ -335,7 +356,7 @@ function EstesMes({
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {pendentes.map((item) => {
-              const responsavel = textoResponsavel(item.id, splitResult, names);
+              const responsavel = textoResponsavel(item.chave || item.id, splitResult, names);
               return (
                 <div
                   key={item.id}
@@ -403,7 +424,7 @@ function EstesMes({
   );
 }
 
-function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment, cats = [] }) {
+function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment, onEditInstallment, cats = [] }) {
   const [selecionado, setSelecionado] = useState(0);
   const meses = buildFutureMonths(state, simulacao);
   const maxTotal = Math.max(...meses.map((m) => m.total), 1);
@@ -564,6 +585,61 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment, c
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{brl(p.value)}</span>
+                    {onEditInstallment && (
+                      <button
+                        onClick={() => {
+                          const novoNome = window.prompt('Nome da compra parcelada:', p.name);
+                          if (novoNome === null) return;
+                          const novoValor = window.prompt('Valor de CADA parcela:', p.value);
+                          if (novoValor === null) return;
+                          const valor = parseValor(novoValor);
+                          const novoTotal = window.prompt('Total de parcelas:', p.count);
+                          if (novoTotal === null) return;
+                          const total = Number(novoTotal);
+                          // ATENÇÃO: `p` aqui é a parcela PROJETADA para o mês
+                          // que está selecionado (done + 1 + k), não o
+                          // registro do parcelamento. Usar `p.parcelaAtual`
+                          // como padrão adiantava o parcelamento em `k`
+                          // parcelas só de confirmar sem mudar nada — o
+                          // valor certo vem do registro original.
+                          const registro = (state.installments || []).find((i) => i.id === p.id);
+                          const jaPagas = registro ? registro.done || 0 : 0;
+                          const novoPagas = window.prompt(
+                            `Quantas parcelas já foram pagas? (0 a ${total - 1})`,
+                            jaPagas
+                          );
+                          if (novoPagas === null) return;
+                          if (String(novoPagas).trim() === '') {
+                            window.alert('Diga quantas parcelas já foram pagas (pode ser 0).');
+                            return;
+                          }
+                          const pagas = Number(novoPagas);
+                          if (valor === null || valor <= 0) {
+                            window.alert('O valor da parcela não parece válido. Ex.: 110 ou 1.250,50.');
+                            return;
+                          }
+                          if (!Number.isInteger(total) || total < 1 || total > 72) {
+                            window.alert('O total de parcelas tem que ser um número de 1 a 72.');
+                            return;
+                          }
+                          if (!Number.isInteger(pagas) || pagas < 0 || pagas >= total) {
+                            // Não deixa igualar ao total: aí não sobraria
+                            // nenhuma parcela, o parcelamento desapareceria
+                            // de todas as telas e ficaria sem como editar
+                            // nem apagar. Quitado se apaga na lixeira.
+                            window.alert(
+                              `As parcelas já pagas têm que ser de 0 a ${total - 1}. Se já quitou tudo, use a lixeira pra apagar o parcelamento.`
+                            );
+                            return;
+                          }
+                          onEditInstallment(p.id, { name: novoNome.trim() || p.name, per: valor, count: total, done: pagas });
+                        }}
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                        aria-label={`Editar parcelas de ${p.name}`}
+                      >
+                        <PencilSimple size={14} color={color.textWeak} />
+                      </button>
+                    )}
                     {onDeleteInstallment && (
                       <button
                         onClick={() => {
@@ -824,6 +900,7 @@ export default function Bills({
   onToggleSharedPurchasePaid,
   onLancarInstallment,
   onDeleteInstallment,
+  onEditInstallment,
   onFecharMes,
   rendaCasal,
   rendaFixaCasal,
@@ -882,7 +959,7 @@ export default function Bills({
 
       {view === 'futuro' && (
         <>
-          <MesesFuturos state={state} rendaFixaCasal={rendaFixaCasal} simulacao={simulacao} onDeleteInstallment={onDeleteInstallment} cats={state.cats} />
+          <MesesFuturos state={state} rendaFixaCasal={rendaFixaCasal} simulacao={simulacao} onDeleteInstallment={onDeleteInstallment} onEditInstallment={onEditInstallment} cats={state.cats} />
           <div style={{ marginTop: 20 }}>
             <Simulador
               onLancar={(sim) => {

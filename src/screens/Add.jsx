@@ -83,7 +83,10 @@ export default function Add({
   // Onde o gasto foi pago: um dos cartões cadastrados (aí fica pendente
   // na fatura) ou débito/pix/dinheiro (aí já sai como pago).
   const pagamentos = opcoesPagamento(cards);
-  const [pagamentoId, setPagamentoId] = useState(pagamentos[0]?.id || 'debito');
+  // Começa em "Débito" de propósito, não no primeiro cartão: escolher
+  // cartão sem querer faz o gasto ficar pendente e ocupar limite de um
+  // cartão que não é o certo. Débito é o palpite que não cria dívida.
+  const [pagamentoId, setPagamentoId] = useState('debito');
 
   const [cat, setCat] = useState(cats[0]?.id || '');
   const [payer, setPayer] = useState('Ana');
@@ -156,7 +159,7 @@ export default function Add({
         {pagamentoEscolhido?.ehCartao
           ? addType === 'pessoal'
             ? 'Vai ficar pendente na fatura desse cartão e ocupando limite até você marcar como pago no Perfil.'
-            : 'Fica registrado de onde saiu. Gasto de casa lançado aqui entra no orçamento da categoria — pra ele entrar na fatura dividida do cartão, use Início → Importar extrato.'
+            : 'Entra na fatura desse cartão, ocupando limite, e é dividida entre vocês junto com o resto da fatura. Aparece em Contas → Este mês.'
           : 'Já sai como pago, porque o dinheiro saiu da conta na hora.'}
         {cards.length === 0 && ' Cadastre seus cartões em Contas → Cartões pra escolher um aqui.'}
       </div>

@@ -25,19 +25,12 @@ import { hashPin } from './lib/security';
 import { pagamentoFromOpcao, textoPagamento } from './lib/paymentMethods';
 import { diaDeHoje } from './lib/hoje';
 import { chaveParcelamento } from './lib/futureBills';
+import { aporteMensalTotal } from './lib/goals';
 
 const CHAVE_DESBLOQUEADO = 'casa:desbloqueado';
 
 // Telas que ainda não existem: por enquanto mostram um aviso simples,
 // para não quebrar a navegação enquanto construímos uma de cada vez.
-function EmComConstrucao({ nome }) {
-  return (
-    <div style={{ padding: '64px 20px 168px', color: color.textMedium }}>
-      Tela "{nome}" ainda não construída.
-    </div>
-  );
-}
-
 export default function App() {
   const [screen, setScreen] = useState('home');
   const [adding, setAdding] = useState(null); // null = fechado, ou { person } quando aberto
@@ -115,13 +108,40 @@ export default function App() {
     setState((prev) => {
       if (addType === 'casa') {
         const ondeFoi = textoPagamento(pagamento, prev.cards || []);
+        const nomeGasto = desc || prev.cats.find((c) => c.id === cat)?.name || 'Gasto';
+
+        // Gasto de casa no CARTÃO vira uma compra conjunta, igual às que
+        // vêm do extrato importado: entra na fatura daquele cartão, ocupa
+        // limite e entra na divisão. Antes ele só somava na categoria e
+        // desaparecia — a tela prometia fatura e limite e nada acontecia.
+        //
+        // Não soma em `cats.spent` de propósito: compra conjunta já é
+        // contada por categoria em "Onde foi" (e no gasto do mês) por
+        // outro caminho. Somar nos dois lugares contaria em dobro.
+        if (pagamento.metodo === 'cartao') {
+          return {
+            ...prev,
+            sharedPurchases: [
+              ...(prev.sharedPurchases || []),
+              {
+                id: Date.now() + Math.random(),
+                name: nomeGasto,
+                value,
+                category: cat || null,
+                cardId: pagamento.cardId,
+                paid: false,
+              },
+            ],
+          };
+        }
+
         return {
           ...prev,
           cats: prev.cats.map((c) => (c.id === cat ? { ...c, spent: c.spent + value } : c)),
           txs: [
             {
               id: Date.now(),
-              desc: desc || prev.cats.find((c) => c.id === cat)?.name || 'Gasto',
+              desc: nomeGasto,
               icon: prev.cats.find((c) => c.id === cat)?.icon,
               catId: cat,
               // `payer` e `data` são guardados como dado puro; o texto que
@@ -153,6 +173,10 @@ export default function App() {
                 {
                   id: Date.now(),
                   name: desc || pcat,
+                  // A categoria escolhida (Streaming, Academia...) era
+                  // jogada fora quando você escrevia uma descrição —
+                  // então os chips da tela não serviam pra nada.
+                  categoria: pcat || null,
                   value,
                   paid: pagamento.paid,
                   metodo: pagamento.metodo,
@@ -299,6 +323,15 @@ export default function App() {
     }));
   }
 
+  // Corrigir nome e preço de um item do carrinho. Antes, errar o preço
+  // unitário só se resolvia zerando a quantidade e recadastrando.
+  function shopEditItem(id, dados) {
+    setState((prev) => ({
+      ...prev,
+      shop: { ...prev.shop, items: prev.shop.items.map((i) => (i.id === id ? { ...i, ...dados } : i)) },
+    }));
+  }
+
   function shopChangeMethod(method) {
     setState((prev) => ({ ...prev, shop: { ...prev.shop, method, debitPart: 0 } }));
   }
@@ -426,6 +459,25 @@ export default function App() {
     }));
   }
 
+  // Editar um parcelamento (valor da parcela, total e quantas já foram).
+  // Antes só dava pra apagar e refazer pelo Simulador — errou o valor,
+  // perdeu tudo.
+  function editInstallment(id, dados) {
+    setState((prev) => ({
+      ...prev,
+      installments: (prev.installments || []).map((i) => {
+        if (i.id !== id) return i;
+        const novo = { ...i, ...dados };
+        // Trava de segurança independente da tela: parcelas pagas nunca
+        // podem passar do total, senão o parcelamento desaparece das
+        // projeções e fica sem como ser corrigido.
+        const count = Number.isFinite(novo.count) && novo.count > 0 ? novo.count : i.count;
+        const done = Math.min(Math.max(0, Number(novo.done) || 0), Math.max(0, count - 1));
+        return { ...novo, count, done };
+      }),
+    }));
+  }
+
   function editCategoryBudget(id, budget) {
     setState((prev) => ({
       ...prev,
@@ -445,7 +497,13 @@ export default function App() {
   function addAporteGoal(id, valor) {
     setState((prev) => ({
       ...prev,
-      goals: prev.goals.map((g) => (g.id === id ? { ...g, saved: Math.max(0, g.saved + valor) } : g)),
+      goals: prev.goals.map((g) =>
+        g.id === id
+          ? // `aportadoEm` marca que o aporte deste mês já foi feito, pra
+            // o fechamento não somar de novo (ver src/lib/goals.js).
+            { ...g, saved: Math.max(0, (g.saved || 0) + valor), aportadoEm: prev.month?.label }
+          : g
+      ),
     }));
   }
 
@@ -610,7 +668,12 @@ export default function App() {
           ...sharedPurchases,
           {
             id: Date.now() + Math.random(),
-            name: it.desc + (it.parcelaTotal ? ` · Parcela ${it.parcelaAtual}/${it.parcelaTotal}` : ''),
+            // Só escreve o sufixo quando os DOIS números existem: antes,
+            // preencher só o "de quantas" gravava "· Parcela null/5" no
+            // nome, e ficava assim inclusive no histórico do mês fechado.
+            name:
+              it.desc +
+              (it.parcelaTotal && it.parcelaAtual ? ` · Parcela ${it.parcelaAtual}/${it.parcelaTotal}` : ''),
             value: it.value,
             category: it.category || null,
             cardId: it.cardId || null,
@@ -798,6 +861,19 @@ export default function App() {
   // Contas calculavam cada um do seu jeito e mostravam percentuais
   // diferentes com a mesma frase.
   const gastoCategorias = state.cats.reduce((s, c) => s + c.spent, 0);
+  const reservadoMetas = aporteMensalTotal(state.goals, state.month?.label);
+  const somaPessoal = (pessoa) =>
+    [...(state.personal?.[pessoa]?.fixed || []), ...(state.personal?.[pessoa]?.variable || [])]
+      .reduce((s, i) => s + (i.value || 0), 0);
+  const gastoPessoalPorPessoa = { Rui: somaPessoal('Rui'), Ana: somaPessoal('Ana') };
+  // A Divisão calculava a sobra sobre a renda FIXA e o Perfil sobre fixa
+  // + extras — as duas telas se contradiziam para a mesma pessoa no mesmo
+  // mês ("falta R$ 800" aqui, "sobra R$ 700" lá). Agora as duas usam a
+  // renda cheia. (O alerta de 42% continua com renda fixa só, à parte.)
+  const rendaCheiaPorPessoa = {
+    Rui: state.income.Rui + extrasTotal('Rui'),
+    Ana: state.income.Ana + extrasTotal('Ana'),
+  };
 
   const SCREENS = {
     home: () => (
@@ -811,6 +887,7 @@ export default function App() {
         onEditCategoryBudget={editCategoryBudget}
         rendaCasal={rendaCasalTotal}
         billsTotal={billsTotal}
+        reservadoMetas={reservadoMetas}
         onImport={() => setImporting(true)}
         onDeleteTx={deleteTx}
       />
@@ -821,6 +898,7 @@ export default function App() {
         mercado={state.cats.find((c) => c.id === 'mercado')}
         onAddItem={shopAddItem}
         onChangeQty={shopChangeQty}
+        onEditItem={shopEditItem}
         onChangeMethod={shopChangeMethod}
         onChangeDebitPart={shopChangeDebitPart}
         onFinalizar={shopFinalizar}
@@ -840,6 +918,7 @@ export default function App() {
         onToggleSharedPurchasePaid={toggleSharedPurchasePaid}
         onLancarInstallment={lancarInstallment}
         onDeleteInstallment={deleteInstallment}
+        onEditInstallment={editInstallment}
         onFecharMes={fecharMes}
         rendaCasal={rendaCasalTotal}
         rendaFixaCasal={rendaCasal}
@@ -861,6 +940,8 @@ export default function App() {
         splitResult={splitResult}
         totalCommitments={totalCommitments}
         names={names}
+        gastoPessoal={gastoPessoalPorPessoa}
+        rendaTotalPorPessoa={rendaCheiaPorPessoa}
       />
     ),
     goals: () => (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Minus, X } from '@phosphor-icons/react';
+import { X, PencilSimple } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl, parseValor } from '../lib/format';
 
@@ -140,7 +140,7 @@ function AdicionarItem({ onAdd }) {
   );
 }
 
-function ListaItens({ items, onChangeQty }) {
+function ListaItens({ items, onChangeQty, onEditItem }) {
   if (items.length === 0) {
     return <div style={{ fontSize: 13, color: color.textWeak, marginBottom: 20 }}>Carrinho vazio.</div>;
   }
@@ -159,13 +159,52 @@ function ListaItens({ items, onChangeQty }) {
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13.5 }}>{item.name}</div>
+            {/* Toque no nome pra corrigir: antes, errar o preço unitário
+                só se resolvia zerando a quantidade e recadastrando. */}
+            <button
+              onClick={() => {
+                if (!onEditItem) return;
+                const novoNome = window.prompt('Nome do item:', item.name);
+                if (novoNome === null) return;
+                const novoPreco = window.prompt('Preço de cada unidade:', item.unitPrice);
+                if (novoPreco === null) return;
+                const preco = parseValor(novoPreco);
+                if (preco === null || preco <= 0) {
+                  window.alert('Esse preço não parece válido. Ex.: 12,90 ou 8.');
+                  return;
+                }
+                onEditItem(item.id, { name: novoNome.trim() || item.name, unitPrice: preco });
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                textAlign: 'left',
+                color: color.text,
+                fontSize: 13.5,
+                cursor: onEditItem ? 'pointer' : 'default',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+              }}
+              aria-label={`Editar ${item.name}`}
+            >
+              {item.name}
+              {onEditItem && <PencilSimple size={11} color={color.textWeak} />}
+            </button>
             <div style={{ fontSize: 11, color: color.textWeak }}>
               {item.qty}× {brl(item.unitPrice)}
             </div>
           </div>
           <button
-            onClick={() => onChangeQty(item.id, item.qty - 1)}
+            onClick={() => {
+              // Chegar a zero tira o item do carrinho — a única ação que
+              // apagava algo sem confirmar em todo o app.
+              if (item.qty <= 1) {
+                if (!window.confirm(`Tirar "${item.name}" do carrinho?`)) return;
+              }
+              onChangeQty(item.id, item.qty - 1);
+            }}
             style={{ width: 26, height: 26, borderRadius: 99, border: `1px solid ${color.border}`, background: 'transparent', color: color.text, cursor: 'pointer' }}
           >
             −
@@ -269,6 +308,7 @@ export default function Shop({
   mercado,
   onAddItem,
   onChangeQty,
+  onEditItem,
   onChangeMethod,
   onChangeDebitPart,
   onFinalizar,
@@ -289,7 +329,7 @@ export default function Shop({
       <AdicionarItem onAdd={onAddItem} />
 
       <SectionLabel>Itens</SectionLabel>
-      <ListaItens items={shop.items} onChangeQty={onChangeQty} />
+      <ListaItens items={shop.items} onChangeQty={onChangeQty} onEditItem={onEditItem} />
 
       <ComoVaiPagar
         method={shop.method}

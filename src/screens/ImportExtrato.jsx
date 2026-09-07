@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, UploadSimple } from '@phosphor-icons/react';
+import { X, UploadSimple, PencilSimple } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl, parseValor } from '../lib/format';
 import { parseExtratoCSV, guessCategory } from '../lib/importParsers';
@@ -365,7 +365,8 @@ export default function ImportExtrato({ cats, cards = [], names, jaLancadas = []
                 ))}
               </div>
               <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6 }}>
-                Vale pra fatura e pro limite desse cartão em Contas → Cartões. A divisão entre vocês não muda por causa disso.
+                Vale pra fatura e pro limite desse cartão em Contas → Cartões. Confira antes de importar: com mais de um
+                cartão, é aqui que você diz de qual é este extrato.
               </div>
             </div>
           )}
@@ -383,9 +384,40 @@ export default function ImportExtrato({ cats, cards = [], names, jaLancadas = []
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {it.desc}
-                    </div>
+                    {/* A descrição crua do banco ("PAGSEG *MERC12345")
+                        virava o nome permanente da compra: agora dá pra
+                        corrigir nome e valor antes de importar. */}
+                    <button
+                      onClick={() => {
+                        const novoNome = window.prompt('Nome da compra:', it.desc);
+                        if (novoNome === null) return;
+                        const novoValor = window.prompt('Valor:', it.value);
+                        if (novoValor === null) return;
+                        const valor = parseValor(novoValor);
+                        if (valor === null || valor <= 0) {
+                          window.alert('Esse valor não parece válido. Ex.: 55,63 ou 1.250,90.');
+                          return;
+                        }
+                        atualizarItem(it.id, { desc: novoNome.trim() || it.desc, value: valor });
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        textAlign: 'left',
+                        color: color.text,
+                        fontSize: 13.5,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        maxWidth: '100%',
+                      }}
+                      aria-label={`Editar ${it.desc}`}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.desc}</span>
+                      <PencilSimple size={11} color={color.textWeak} style={{ flexShrink: 0 }} />
+                    </button>
                     <div style={{ fontSize: 10.5, color: color.textWeak }}>
                       {it.date || 'lançada na mão'}
                       {it.parcelaTotal ? ` · parcela ${it.parcelaAtual}/${it.parcelaTotal}` : ''}

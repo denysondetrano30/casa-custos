@@ -37,11 +37,14 @@ function seloDoMes(pctGasto, pctHoje, rendaCasal, gastoTotal) {
   return { texto: 'no ritmo', alerta: false };
 }
 
-function HeroCard({ month, gastoTotal, rendaCasal }) {
+function HeroCard({ month, gastoTotal, rendaCasal, reservadoMetas = 0 }) {
   const restante = rendaCasal - gastoTotal;
+  // O que sobra menos o que vocês se comprometeram a guardar nas metas:
+  // dinheiro reservado não é dinheiro livre pra gastar.
+  const livre = restante - reservadoMetas;
   const pctGasto = rendaCasal > 0 ? Math.min(100, (gastoTotal / rendaCasal) * 100) : 0;
   const pctHoje = (month.today / month.daysInMonth) * 100;
-  const porDia = Math.max(0, restante) / Math.max(1, month.daysInMonth - month.today);
+  const porDia = Math.max(0, livre) / Math.max(1, month.daysInMonth - month.today);
   const selo = seloDoMes(pctGasto, pctHoje, rendaCasal, gastoTotal);
 
   return (
@@ -124,12 +127,18 @@ function HeroCard({ month, gastoTotal, rendaCasal }) {
       <div style={{ fontSize: 12.5, color: color.textMedium, marginTop: 6 }}>
         Renda do casal esse mês: {brl(rendaCasal)}
       </div>
+      {reservadoMetas > 0 && (
+        <div style={{ fontSize: 12.5, color: color.textMedium }}>
+          Reservado para metas {brl(reservadoMetas)} ·{' '}
+          {livre >= 0 ? `livre ${brl(livre)}` : `${brl(Math.abs(livre))} além do que dá pra guardar`}
+        </div>
+      )}
       <div style={{ fontSize: 12.5, color: color.textMedium }}>
         Pode gastar por dia {brl(porDia)}
       </div>
       <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 8 }}>
-        Renda do casal (fixa + extras) menos contas fixas menos gasto nas categorias abaixo. Renda e contas se editam
-        no Perfil e nas Contas.
+        Renda do casal (fixa + extras) menos contas fixas, compras no cartão e gastos nas categorias abaixo. Renda e
+        contas se editam no Perfil e nas Contas.
       </div>
     </div>
   );
@@ -342,7 +351,7 @@ function RecentTransactions({ txs, onDeleteTx, names }) {
   );
 }
 
-export default function Home({ month, cats, txs, names = { Rui: 'Rui', Ana: 'Ana' }, onEditCategoryBudget, rendaCasal, billsTotal, bills = [], sharedPurchases = [], onImport, onDeleteTx }) {
+export default function Home({ month, cats, txs, names = { Rui: 'Rui', Ana: 'Ana' }, onEditCategoryBudget, rendaCasal, billsTotal, reservadoMetas = 0, bills = [], sharedPurchases = [], onImport, onDeleteTx }) {
   const spent = cats.reduce((sum, c) => sum + c.spent, 0);
   const gastoTotal = spent + billsTotal;
 
@@ -375,7 +384,7 @@ export default function Home({ month, cats, txs, names = { Rui: 'Rui', Ana: 'Ana
         </div>
       </div>
 
-      <HeroCard month={month} gastoTotal={gastoTotal} rendaCasal={rendaCasal} />
+      <HeroCard month={month} gastoTotal={gastoTotal} rendaCasal={rendaCasal} reservadoMetas={reservadoMetas} />
       <AvisoContasVencendo bills={bills} hoje={month.today} />
       <CategoriesSection cats={cats} bills={bills} sharedPurchases={sharedPurchases} onEditBudget={handleEditBudget} />
       <ImportCard onClick={onImport} />

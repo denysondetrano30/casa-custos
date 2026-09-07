@@ -120,10 +120,15 @@ function ListaValores({ titulo, itens, vazio, onEditItem, onDeleteItem, onToggle
                 >
                   {item.name}
                 </div>
-                {textoPagamento(item, cards) && (
+                {(textoPagamento(item, cards) || item.categoria) && (
                   <div style={{ fontSize: 10.5, color: color.textWeak }}>
-                    {textoPagamento(item, cards)}
-                    {item.metodo === 'cartao' && !item.paid ? ' · ainda na fatura' : ''}
+                    {[
+                      item.categoria,
+                      textoPagamento(item, cards),
+                      item.metodo === 'cartao' && !item.paid ? 'ainda na fatura' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </div>
                 )}
               </div>

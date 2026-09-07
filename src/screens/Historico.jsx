@@ -35,6 +35,25 @@ export default function Historico({ historico = [], names = { Rui: 'Rui', Ana: '
               {sobra >= 0 ? `Sobrou ${brl(sobra)}` : `Passou ${brl(Math.abs(sobra))} da renda`} · renda {brl(mes.rendaCasal)}
             </div>
 
+            {/* Contas, cartão e pessoais já eram guardados no fechamento e
+                nunca apareciam. "Guardado em metas" começa a ser gravado
+                agora, então nos meses fechados antes disso ele não vem. */}
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '4px 14px',
+                fontSize: 11.5,
+                color: color.textWeak,
+                marginBottom: 12,
+              }}
+            >
+              {mes.billsTotal > 0 && <span>contas fixas {brl(mes.billsTotal)}</span>}
+              {mes.sharedPurchasesTotal > 0 && <span>cartão {brl(mes.sharedPurchasesTotal)}</span>}
+              {mes.personalVariableTotal > 0 && <span>pessoais {brl(mes.personalVariableTotal)}</span>}
+              {mes.guardadoEmMetas > 0 && <span>guardado em metas {brl(mes.guardadoEmMetas)}</span>}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {mes.cats.map((c) => (
                 <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
