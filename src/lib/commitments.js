@@ -15,6 +15,16 @@
 // Quando a compra já tiver um cartão identificado (ver cadastro de
 // cartões), agrupa por cartão; enquanto isso não existe pra ela, cai numa
 // fatura geral única.
+// O split.js faz `result[item.owner].push(...)` sem guarda: um `owner`
+// que não seja exatamente 'Rui' ou 'Ana' derruba o app inteiro em tela
+// branca (e o estado vem de um documento compartilhado na nuvem, então
+// basta uma escrita de outra versão pra travar a casa). O split.js é
+// congelado por contrato, então a validação vive aqui — é por onde todo
+// `owner` passa antes de chegar lá.
+function donoValido(owner) {
+  return owner === 'Rui' || owner === 'Ana' ? owner : undefined;
+}
+
 export function commitmentIdForSharedPurchase(p) {
   return `cartao-${p.cardId || '_geral'}`;
 }
@@ -24,7 +34,7 @@ export function buildCommitments(state) {
     id: `bill-${b.id}`,
     name: b.name,
     value: b.value,
-    owner: b.owner,
+    owner: donoValido(b.owner),
   }));
 
   // IMPORTANTE: aqui entram TODAS as compras, pagas ou não. O algoritmo de
@@ -51,6 +61,11 @@ export function buildCommitments(state) {
       id: `cartao-${chave}`,
       name: cartao ? `Fatura ${cartao.name}` : 'Fatura do cartão',
       value: total,
+      // Quem paga a fatura é o dono do cartão — o split.js prende a conta
+      // nele em vez de sugerir que a outra pessoa pague o cartão alheio.
+      // A diferença entre o que cada um desembolsa e o que cada um deveria
+      // bancar sai numa transferência só (ver src/lib/settlement.js).
+      owner: donoValido(cartao?.owner),
     });
   });
 

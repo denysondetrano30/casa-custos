@@ -1,5 +1,6 @@
 import { color, radius } from '../lib/tokens';
 import { brl } from '../lib/format';
+import { buildSettlement } from '../lib/settlement';
 
 function SectionLabel({ children }) {
   return (
@@ -158,14 +159,24 @@ function ProporcaoCard({ pctRui, onChangePctRui, income, total, names }) {
   );
 }
 
-function Coluna({ pessoa, nome, itens, income, avatarColor, names, gastoPessoal = 0, rendaDaPessoa }) {
+function Coluna({ pessoa, nome, itens, income, avatarColor, names, gastoPessoal = 0, rendaDaPessoa, acerto }) {
+  // `soma` é o que sai do bolso da pessoa nas contas. Mas quem paga uma
+  // conta do outro (ou tem conta paga pelo outro) acerta a diferença numa
+  // transferência — então a sobra tem que contar isso, senão ela erra
+  // exatamente o valor da transferência, logo abaixo do card que anuncia
+  // essa transferência.
   const soma = itens.reduce((s, i) => s + i.part, 0);
+  const transferencia = acerto && !acerto.quitado
+    ? acerto.de === pessoa
+      ? acerto.valor // manda dinheiro: sai mais do bolso
+      : -acerto.valor // recebe: volta pro bolso
+    : 0;
   // Mesma conta do Perfil: renda cheia (fixa + extras) menos a parte das
   // contas de casa menos os gastos pessoais. Antes esta tela olhava só a
   // renda fixa e só as contas de casa, e podia anunciar folga pra quem
   // estava no vermelho no Perfil (ou o contrário).
   const renda = rendaDaPessoa !== undefined ? rendaDaPessoa : income[pessoa];
-  const sobra = renda - soma - gastoPessoal;
+  const sobra = renda - soma - gastoPessoal - transferencia;
 
   return (
     <div style={{ flex: 1 }}>
@@ -207,7 +218,7 @@ function Coluna({ pessoa, nome, itens, income, avatarColor, names, gastoPessoal 
             )}
             {item.owner && !item.shared && (
               <div style={{ fontSize: 10, color: color.textWeak, marginTop: 4 }}>
-                conta pessoal — fixa com {names[item.owner] || item.owner}
+                paga {names[item.owner] || item.owner} — a diferença entra no acerto acima
               </div>
             )}
           </div>
@@ -230,7 +241,15 @@ export default function Split({
   names = { Rui: 'Rui', Ana: 'Ana' },
   gastoPessoal = { Rui: 0, Ana: 0 },
   rendaTotalPorPessoa,
+  acerto: acertoProp,
 }) {
+  const acerto = acertoProp || buildSettlement(splitResult, pctRui, ['Rui', 'Ana']);
+  // Sem nenhum dono definido, "quitado" não quer dizer que cada um paga o
+  // que é seu — quer dizer que o algoritmo distribuiu tudo por conta
+  // própria. O texto muda pra não prometer o que a casa ainda não
+  // configurou.
+  const temAlgumDono = ['Rui', 'Ana'].some((p) => (splitResult?.[p] || []).some((i) => i.owner));
+
   return (
     <div style={{ padding: '64px 20px 168px' }}>
       <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: '-.02em', marginBottom: 20 }}>Divisão</div>
@@ -239,9 +258,48 @@ export default function Split({
       <ProporcaoCard pctRui={pctRui} onChangePctRui={onChangePctRui} income={income} total={totalCommitments} names={names} />
 
       <SectionLabel>Quem paga o quê — sugestão</SectionLabel>
+      {/* O acerto do mês: uma transferência só. Cada um paga as contas que
+          são dele (o cartão no nome dele, por exemplo) e a diferença entre
+          o desembolso e a parte de cada um vira UMA transferência — em vez
+          de dinheiro indo e voltando pros dois lados. */}
+      <div
+        style={{
+          borderRadius: radius.card,
+          padding: 16,
+          background: acerto.quitado ? color.surfaceInset : color.surfaceElevated,
+          border: `1px solid ${acerto.quitado ? color.border : color.accent}`,
+          marginBottom: 22,
+        }}
+      >
+        <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: color.textMedium, marginBottom: 8 }}>
+          Acerto do mês
+        </div>
+        {acerto.quitado ? (
+          <div style={{ fontSize: 15, color: color.text }}>
+            {temAlgumDono
+              ? 'Está quitado — cada um paga as próprias contas e ninguém precisa transferir nada.'
+              : 'Nada a transferir. Dica: marque de quem é cada cartão (em Contas → Cartões) pra cada um pagar o próprio cartão e o app calcular a diferença numa transferência só.'}
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 22, fontWeight: 500, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums', marginBottom: 4 }}>
+              {brl(acerto.valor)}
+            </div>
+            <div style={{ fontSize: 13.5, color: color.accentLight }}>
+              {names[acerto.de] || acerto.de} transfere para {names[acerto.para] || acerto.para}
+            </div>
+          </>
+        )}
+        <div style={{ fontSize: 11, color: color.textWeak, marginTop: 10, lineHeight: 1.55 }}>
+          Cada um paga no banco as contas que estão na coluna dele abaixo. Essa transferência fecha a diferença entre
+          o que saiu do bolso de cada um e a parte de cada um no total ({brl(acerto.deveBancar.Rui)} para {names.Rui} e{' '}
+          {brl(acerto.deveBancar.Ana)} para {names.Ana}).
+        </div>
+      </div>
+
       <div style={{ display: 'flex', gap: 14 }}>
-        <Coluna pessoa="Rui" nome={names.Rui} itens={splitResult.Rui} income={income} avatarColor={color.chart[0]} names={names} gastoPessoal={gastoPessoal.Rui} rendaDaPessoa={rendaTotalPorPessoa?.Rui} />
-        <Coluna pessoa="Ana" nome={names.Ana} itens={splitResult.Ana} income={income} avatarColor={color.chart[1]} names={names} gastoPessoal={gastoPessoal.Ana} rendaDaPessoa={rendaTotalPorPessoa?.Ana} />
+        <Coluna pessoa="Rui" nome={names.Rui} itens={splitResult.Rui} income={income} avatarColor={color.chart[0]} names={names} gastoPessoal={gastoPessoal.Rui} rendaDaPessoa={rendaTotalPorPessoa?.Rui} acerto={acerto} />
+        <Coluna pessoa="Ana" nome={names.Ana} itens={splitResult.Ana} income={income} avatarColor={color.chart[1]} names={names} gastoPessoal={gastoPessoal.Ana} rendaDaPessoa={rendaTotalPorPessoa?.Ana} acerto={acerto} />
       </div>
     </div>
   );

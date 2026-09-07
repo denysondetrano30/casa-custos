@@ -283,6 +283,7 @@ function EstesMes({
                     }}
                   >
                     {b.name} · dia {b.due}
+                    {b.owner ? ` · paga ${names[b.owner] || b.owner}` : ''}
                   </span>
                   <span style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums', color: b.paid ? color.textWeak : color.text }}>
                     {brl(b.value)}
@@ -326,7 +327,13 @@ function EstesMes({
                         }
                         categoria = achada ? achada.id : null;
                       }
-                      onEditBill(b.id, { name: novoNome.trim(), due: dia, value: novoValor, category: categoria });
+                      // Dono opcional: marque só as contas que saem sempre
+                      // da conta de uma pessoa (ex. financiamento no nome
+                      // dela). As sem dono continuam sendo distribuídas
+                      // inteiras pelo algoritmo, como antes.
+                      const dono = perguntarDono(names, b.owner, `a conta "${novoNome.trim() || b.name}"`);
+                      if (dono === undefined) return;
+                      onEditBill(b.id, { name: novoNome.trim(), due: dia, value: novoValor, category: categoria, owner: dono });
                     }}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
                     aria-label={`Editar ${b.name}`}
@@ -668,7 +675,37 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment, o
 // nele nos próximos meses. É só informativo: não muda orçamento, divisão
 // nem o alerta de 42% da renda, só ajuda a não precisar abrir o app do
 // banco pra saber quanto ainda sobra de limite.
-function Cartoes({ state, onAddCard, onEditCard, onDeleteCard }) {
+// Pergunta de quem é o cartão / a conta. Devolve 'Rui', 'Ana', null (sem
+// dono) ou undefined quando a pessoa cancelou.
+function perguntarDono(names, atual, oQue) {
+  const resposta = window.prompt(
+    `Quem paga ${oQue}? Digite "${names.Rui}", "${names.Ana}", ou deixe em branco pra o app decidir.`,
+    atual === 'Rui' ? names.Rui : atual === 'Ana' ? names.Ana : ''
+  );
+  if (resposta === null) return undefined; // cancelou de propósito
+  const limpo = resposta.trim().toLowerCase();
+  if (!limpo) return null;
+
+  // Compara PRIMEIRO com os nomes de exibição, e só depois com os
+  // identificadores internos — e só quando eles não colidem com o nome da
+  // outra pessoa. Sem isso, quem se chamasse "Rui" na tela sendo a Ana
+  // teria o dono trocado em silêncio só de confirmar o prompt.
+  const nomeRui = String(names.Rui ?? '').toLowerCase();
+  const nomeAna = String(names.Ana ?? '').toLowerCase();
+  if (limpo === nomeRui) return 'Rui';
+  if (limpo === nomeAna) return 'Ana';
+  if (limpo === 'rui' && nomeAna !== 'rui') return 'Rui';
+  if (limpo === 'ana' && nomeRui !== 'ana') return 'Ana';
+
+  // Nome não reconhecido não pode jogar fora a edição inteira que a pessoa
+  // acabou de digitar — mantém o dono que já estava e avisa.
+  window.alert(
+    `Não reconheci "${resposta.trim()}". Vou manter quem já estava. Pra trocar, edite de novo e digite exatamente "${names.Rui}" ou "${names.Ana}".`
+  );
+  return atual === 'Rui' || atual === 'Ana' ? atual : null;
+}
+
+function Cartoes({ state, onAddCard, onEditCard, onDeleteCard, names = { Rui: 'Rui', Ana: 'Ana' } }) {
   const cards = state.cards || [];
 
   function novoCartao() {
@@ -681,7 +718,9 @@ function Cartoes({ state, onAddCard, onEditCard, onDeleteCard }) {
       window.alert('Isso não parece um valor válido.');
       return;
     }
-    onAddCard(nome.trim(), limite);
+    const dono = perguntarDono(names, null, 'a fatura desse cartão');
+    if (dono === undefined) return;
+    onAddCard(nome.trim(), limite, dono);
   }
 
   function editarCartao(card) {
@@ -694,7 +733,9 @@ function Cartoes({ state, onAddCard, onEditCard, onDeleteCard }) {
       window.alert('Isso não parece um valor válido.');
       return;
     }
-    onEditCard(card.id, { name: nome.trim(), limit: limite });
+    const dono = perguntarDono(names, card.owner, 'a fatura desse cartão');
+    if (dono === undefined) return;
+    onEditCard(card.id, { name: nome.trim(), limit: limite, owner: dono });
   }
 
   return (
@@ -717,6 +758,11 @@ function Cartoes({ state, onAddCard, onEditCard, onDeleteCard }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <CreditCard size={17} color={color.accentIcon} />
                     <span style={{ fontSize: 15, fontWeight: 500 }}>{card.name}</span>
+                    {card.owner && (
+                      <span style={{ fontSize: 10.5, color: color.textWeak, marginLeft: 6 }}>
+                        · paga {names[card.owner] || card.owner}
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
@@ -728,7 +774,16 @@ function Cartoes({ state, onAddCard, onEditCard, onDeleteCard }) {
                     </button>
                     <button
                       onClick={() => {
-                        if (window.confirm(`Apagar o cartão "${card.name}"? As compras já lançadas continuam, só deixam de ter cartão identificado.`))
+                        // Avisa do efeito no acerto: sem o cartão, as
+                        // compras perdem o dono e a divisão volta a
+                        // distribuí-las, mudando quem transfere pra quem.
+                        if (
+                          window.confirm(
+                            `Apagar o cartão "${card.name}"? As compras já lançadas continuam, mas perdem o cartão e o dono${
+                              card.owner ? ` (${names[card.owner] || card.owner})` : ''
+                            } — o acerto do mês na aba Divisão vai ser recalculado.`
+                          )
+                        )
                           onDeleteCard(card.id);
                       }}
                       style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
@@ -952,7 +1007,7 @@ export default function Bills({
       )}
 
       {view === 'cartoes' && (
-        <Cartoes state={state} onAddCard={onAddCard} onEditCard={onEditCard} onDeleteCard={onDeleteCard} />
+        <Cartoes state={state} onAddCard={onAddCard} onEditCard={onEditCard} onDeleteCard={onDeleteCard} names={names} />
       )}
 
       {view === 'historico' && <Historico historico={state.historico || []} names={names} />}

@@ -622,6 +622,7 @@ export default function Profile({
   bills = [],
   sharedPurchases = [],
   cards = [],
+  acerto,
   onTogglePaid,
   onToggleSharedPurchasePaid,
   onSetGroupPaid,
@@ -652,8 +653,12 @@ export default function Profile({
   const jaPago = pagoCasa + pagoFixas + pagoVariaveis;
   const faltaPagar = Math.max(0, gastoReal - jaPago);
 
-  const sobra = rendaTotal - gastoReal;
-  const pctComprometida = rendaTotal > 0 ? Math.min(100, (gastoReal / rendaTotal) * 100) : 0;
+  // A transferência do acerto também sai (ou entra) no bolso: sem contar
+  // ela, a sobra errava exatamente o valor da transferência anunciada logo
+  // abaixo, na mesma tela.
+  const transferencia = acerto && !acerto.quitado ? (acerto.de === person ? acerto.valor : -acerto.valor) : 0;
+  const sobra = rendaTotal - gastoReal - transferencia;
+  const pctComprometida = rendaTotal > 0 ? Math.min(100, ((gastoReal + transferencia) / rendaTotal) * 100) : 0;
 
   const pctCasa = gastoReal > 0 ? (gastoCasaTotal / gastoReal) * 100 : 0;
   const pctFixas = gastoReal > 0 ? (gastoFixasTotal / gastoReal) * 100 : 0;
@@ -855,6 +860,32 @@ export default function Profile({
           </div>
         )}
       </div>
+
+      {acerto && !acerto.quitado ? (
+        <div
+          style={{
+            borderRadius: radius.row,
+            padding: '11px 13px',
+            background: color.surfaceInset,
+            marginBottom: 18,
+            fontSize: 12.5,
+            lineHeight: 1.5,
+            color: acerto.de === person ? color.alertText : color.accentLight,
+          }}
+        >
+          {acerto.de === person
+            ? `Você ainda transfere ${brl(acerto.valor)} para ${names[acerto.para] || acerto.para} pra fechar o mês.`
+            : `${names[acerto.de] || acerto.de} te transfere ${brl(acerto.valor)} pra fechar o mês.`}
+          <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 3 }}>
+            As contas abaixo são as que saem do seu bolso. Essa transferência acerta a diferença entre elas e a sua
+            parte no total — o detalhe está na aba Divisão.
+          </div>
+        </div>
+      ) : acerto ? (
+        <div style={{ fontSize: 12, color: color.textWeak, marginBottom: 18 }}>
+          Nada a transferir este mês — o que sai do seu bolso já é a sua parte.
+        </div>
+      ) : null}
 
       <ContasCasaLista
         itens={partesCasa}

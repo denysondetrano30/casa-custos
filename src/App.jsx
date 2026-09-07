@@ -26,6 +26,7 @@ import { pagamentoFromOpcao, textoPagamento } from './lib/paymentMethods';
 import { diaDeHoje } from './lib/hoje';
 import { chaveParcelamento } from './lib/futureBills';
 import { aporteMensalTotal } from './lib/goals';
+import { buildSettlement } from './lib/settlement';
 
 const CHAVE_DESBLOQUEADO = 'casa:desbloqueado';
 
@@ -532,10 +533,13 @@ export default function App() {
   }
 
   // Cadastro de cartões (nome + limite) — só informativo, ver lib/cardLimits.js.
-  function addCard(nome, limite) {
+  // `owner` = quem paga a fatura desse cartão ('Rui' | 'Ana' | null). É o
+  // que impede a divisão de sugerir que uma pessoa pague o cartão da outra
+  // (ver src/lib/settlement.js).
+  function addCard(nome, limite, dono) {
     setState((prev) => ({
       ...prev,
-      cards: [...(prev.cards || []), { id: `c${Date.now()}`, name: nome, limit: limite }],
+      cards: [...(prev.cards || []), { id: `c${Date.now()}`, name: nome, limit: limite, owner: dono || null }],
     }));
   }
 
@@ -862,6 +866,9 @@ export default function App() {
   // diferentes com a mesma frase.
   const gastoCategorias = state.cats.reduce((s, c) => s + c.spent, 0);
   const reservadoMetas = aporteMensalTotal(state.goals, state.month?.label);
+  // O acerto do mês: uma transferência só, no valor da diferença entre o
+  // que cada um desembolsa e a parte de cada um (ver src/lib/settlement.js).
+  const acerto = buildSettlement(splitResult, state.splitPct.Rui, ['Rui', 'Ana']);
   const somaPessoal = (pessoa) =>
     [...(state.personal?.[pessoa]?.fixed || []), ...(state.personal?.[pessoa]?.variable || [])]
       .reduce((s, i) => s + (i.value || 0), 0);
@@ -942,6 +949,7 @@ export default function App() {
         names={names}
         gastoPessoal={gastoPessoalPorPessoa}
         rendaTotalPorPessoa={rendaCheiaPorPessoa}
+        acerto={acerto}
       />
     ),
     goals: () => (
@@ -984,6 +992,7 @@ export default function App() {
         bills={state.bills}
         sharedPurchases={state.sharedPurchases}
         cards={state.cards || []}
+        acerto={acerto}
         onTogglePaid={togglePaid}
         onToggleSharedPurchasePaid={toggleSharedPurchasePaid}
         onSetGroupPaid={setSharedPurchasesPaidBulk}
