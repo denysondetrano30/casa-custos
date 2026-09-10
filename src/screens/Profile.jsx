@@ -5,6 +5,7 @@ import { auth } from '../lib/firebase';
 import { color, radius } from '../lib/tokens';
 import { brl, parseValor } from '../lib/format';
 import { textoPagamento } from '../lib/paymentMethods';
+import { comprasDesteMes } from '../lib/faturas';
 
 function Segmented({ value, onChange, options, labels }) {
   return (
@@ -203,7 +204,9 @@ function resolverPagamento(itemId, bills, sharedPurchases) {
   // mesmo sem a fatura inteira estar quitada ainda.
   if (itemId.startsWith('cartao-')) {
     const chave = itemId.slice('cartao-'.length);
-    const itens = (sharedPurchases || []).filter((p) => (p.cardId || '_geral') === chave);
+    // Só as compras da fatura deste mês: a próxima fatura não está sendo
+    // dividida agora, então não entra nem no total nem no "pago".
+    const itens = comprasDesteMes(sharedPurchases).filter((p) => (p.cardId || '_geral') === chave);
     if (itens.length === 0) return null;
     const valorPago = itens.filter((p) => p.paid).reduce((s, p) => s + p.value, 0);
     return {

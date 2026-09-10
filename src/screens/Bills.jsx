@@ -5,6 +5,7 @@ import { brl, parseValor } from '../lib/format';
 import { buildFutureMonths, monthLabel } from '../lib/futureBills';
 import { commitmentIdForSharedPurchase } from '../lib/commitments';
 import { buildCardUsage } from '../lib/cardLimits';
+import { comprasDesteMes, comprasDaProximaFatura } from '../lib/faturas';
 import Historico from './Historico';
 
 function Segmented({ value, onChange, options }) {
@@ -68,7 +69,10 @@ function EstesMes({
   names = { Rui: 'Rui', Ana: 'Ana' },
 }) {
   const totalContas = bills.reduce((s, b) => s + b.value, 0);
-  const totalCompras = sharedPurchases.reduce((s, p) => s + p.value, 0);
+  // Só o que cai na fatura deste mês. A próxima fatura tem bloco próprio
+  // em Contas → Cartões, e não pesa aqui (ver src/lib/faturas.js).
+  const comprasDoMes = comprasDesteMes(sharedPurchases);
+  const totalCompras = comprasDoMes.reduce((s, p) => s + p.value, 0);
   // Mesma conta que o Início faz: categorias + contas fixas + compras de
   // cartão, sobre a renda do casal inteira (fixa + extras). Antes esta
   // tela usava só uma parte disso e mostrava um percentual diferente do
@@ -94,7 +98,7 @@ function EstesMes({
   // "ainda falta pagar" no Perfil (ver a nota grande em commitments.js).
   const pendentes = [
     ...bills.filter((b) => !b.paid).map((b) => ({ id: `bill-${b.id}`, name: b.name, value: b.value })),
-    ...sharedPurchases
+    ...comprasDoMes
       .filter((p) => !p.paid)
       // `chave` é o id do compromisso na divisão (a fatura), e várias
       // compras do mesmo cartão compartilham ele — então a lista precisa
@@ -156,13 +160,13 @@ function EstesMes({
         )}
       </div>
 
-      {sharedPurchases.length > 0 && (
+      {comprasDoMes.length > 0 && (
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 8 }}>
             Compras de cartão em conjunto ({brl(totalCompras)})
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {sharedPurchases.map((p) => (
+            {comprasDoMes.map((p) => (
               <div
                 key={p.id}
                 onClick={() => onToggleSharedPurchasePaid && onToggleSharedPurchasePaid(p.id)}
@@ -243,7 +247,7 @@ function EstesMes({
         </div>
       )}
 
-      {bills.length === 0 && sharedPurchases.length === 0 && (
+      {bills.length === 0 && comprasDoMes.length === 0 && (
         <div style={{ fontSize: 13, color: color.textWeak, marginBottom: 16 }}>
           Nenhuma conta fixa cadastrada ainda. Use o botão + (tipo "Conta fixa") para adicionar.
         </div>
@@ -536,11 +540,11 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment, o
       {mes.k === 0 ? (
         <>
           <div style={{ fontSize: 11, color: color.textMedium, marginBottom: 8 }}>Compras no cartão deste mês</div>
-          {(state.sharedPurchases || []).length === 0 ? (
+          {comprasDesteMes(state.sharedPurchases).length === 0 ? (
             <div style={{ fontSize: 13, color: color.textWeak }}>Nenhuma compra lançada neste mês ainda.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(state.sharedPurchases || []).map((p) => (
+              {comprasDesteMes(state.sharedPurchases).map((p) => (
                 <div
                   key={p.id}
                   style={{
@@ -677,6 +681,23 @@ function MesesFuturos({ state, rendaFixaCasal, simulacao, onDeleteInstallment, o
 // banco pra saber quanto ainda sobra de limite.
 // Pergunta de quem é o cartão / a conta. Devolve 'Rui', 'Ana', null (sem
 // dono) ou undefined quando a pessoa cancelou.
+// Pergunta o dia de fechamento da fatura. Devolve o número, null (não
+// sabe) ou undefined se cancelou.
+function perguntarFechamento(atual) {
+  const resposta = window.prompt(
+    'Em que dia a fatura desse cartão fecha? (está no app do banco, ex. 8). Deixe em branco se não souber.',
+    atual || ''
+  );
+  if (resposta === null) return undefined;
+  if (!resposta.trim()) return null;
+  const dia = Number(resposta);
+  if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
+    window.alert('O dia de fechamento tem que ser um número de 1 a 31.');
+    return undefined;
+  }
+  return dia;
+}
+
 function perguntarDono(names, atual, oQue) {
   const resposta = window.prompt(
     `Quem paga ${oQue}? Digite "${names.Rui}", "${names.Ana}", ou deixe em branco pra o app decidir.`,
@@ -705,7 +726,122 @@ function perguntarDono(names, atual, oQue) {
   return atual === 'Rui' || atual === 'Ana' ? atual : null;
 }
 
-function Cartoes({ state, onAddCard, onEditCard, onDeleteCard, names = { Rui: 'Rui', Ana: 'Ana' } }) {
+// As compras de um cartão, uma por uma, com o toque pra marcar como paga
+// (adiantamento). Antes essa lista só existia em "Este mês", misturando
+// todos os cartões — não dava pra abrir um cartão e ver a fatura dele.
+function ComprasDoCartao({ titulo, nota, compras, cats, onTogglePaid, onEditValor, onDelete }) {
+  if (compras.length === 0) return null;
+  const total = compras.reduce((s, p) => s + p.value, 0);
+  const pago = compras.filter((p) => p.paid).reduce((s, p) => s + p.value, 0);
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${color.borderSubtle}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
+        <span style={{ fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: color.textMedium }}>
+          {titulo}
+        </span>
+        <span style={{ fontSize: 12, color: color.textMedium, fontVariantNumeric: 'tabular-nums' }}>
+          {brl(total)}
+          {pago > 0 && <span style={{ color: color.accentLight }}> · adiantado {brl(pago)}</span>}
+        </span>
+      </div>
+      {nota && <div style={{ fontSize: 10.5, color: color.textWeak, marginBottom: 8, lineHeight: 1.5 }}>{nota}</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {compras.map((p) => (
+          <div
+            key={p.id}
+            onClick={() => onTogglePaid && onTogglePaid(p.id)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 9,
+              background: color.surface,
+              borderRadius: radius.row,
+              padding: '9px 11px',
+              cursor: onTogglePaid ? 'pointer' : 'default',
+            }}
+          >
+            {p.paid ? (
+              <CheckCircle size={16} weight="fill" color={color.accentIcon} />
+            ) : (
+              <Circle size={16} color={color.textWeak} />
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: p.paid ? color.textWeak : color.text,
+                  textDecoration: p.paid ? 'line-through' : 'none',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {p.name}
+              </div>
+              <div style={{ fontSize: 10, color: color.textWeak }}>
+                {p.category ? cats.find((c) => c.id === p.category)?.name || p.category : 'sem categoria'}
+              </div>
+            </div>
+            <span
+              style={{
+                fontSize: 13,
+                fontVariantNumeric: 'tabular-nums',
+                color: p.paid ? color.textWeak : color.text,
+                textDecoration: p.paid ? 'line-through' : 'none',
+              }}
+            >
+              {brl(p.value)}
+            </span>
+            {onEditValor && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const novoNome = window.prompt('Nome da compra:', p.name);
+                  if (novoNome === null) return;
+                  const novoValor = window.prompt('Valor da compra:', p.value);
+                  if (novoValor === null) return;
+                  const valor = parseValor(novoValor);
+                  if (valor === null || valor <= 0) {
+                    window.alert('Esse valor não parece válido. Ex.: 46,99 ou 1.250,90.');
+                    return;
+                  }
+                  onEditValor(p.id, { name: novoNome.trim() || p.name, value: valor });
+                }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                aria-label={`Editar ${p.name}`}
+              >
+                <PencilSimple size={13} color={color.textWeak} />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm(`Apagar "${p.name}" da fatura?`)) onDelete(p.id);
+                }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}
+                aria-label={`Apagar ${p.name}`}
+              >
+                <Trash size={13} color={color.textWeak} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Cartoes({
+  state,
+  onAddCard,
+  onEditCard,
+  onDeleteCard,
+  onToggleSharedPurchasePaid,
+  onEditSharedPurchase,
+  onDeleteSharedPurchase,
+  names = { Rui: 'Rui', Ana: 'Ana' },
+}) {
   const cards = state.cards || [];
 
   function novoCartao() {
@@ -720,7 +856,9 @@ function Cartoes({ state, onAddCard, onEditCard, onDeleteCard, names = { Rui: 'R
     }
     const dono = perguntarDono(names, null, 'a fatura desse cartão');
     if (dono === undefined) return;
-    onAddCard(nome.trim(), limite, dono);
+    const fechamento = perguntarFechamento(null);
+    if (fechamento === undefined) return;
+    onAddCard(nome.trim(), limite, dono, fechamento);
   }
 
   function editarCartao(card) {
@@ -735,7 +873,9 @@ function Cartoes({ state, onAddCard, onEditCard, onDeleteCard, names = { Rui: 'R
     }
     const dono = perguntarDono(names, card.owner, 'a fatura desse cartão');
     if (dono === undefined) return;
-    onEditCard(card.id, { name: nome.trim(), limit: limite, owner: dono });
+    const fechamento = perguntarFechamento(card.closingDay);
+    if (fechamento === undefined) return;
+    onEditCard(card.id, { name: nome.trim(), limit: limite, owner: dono, closingDay: fechamento });
   }
 
   return (
@@ -812,10 +952,64 @@ function Cartoes({ state, onAddCard, onEditCard, onDeleteCard, names = { Rui: 'R
                 </div>
                 <div style={{ fontSize: 10.5, color: color.textWeak, marginTop: 6 }}>
                   {brl(uso.faturaDesteMes)} na fatura deste mês + {brl(uso.futuroComprometido)} em parcelas dos próximos meses
+                  {card.closingDay ? ` · fecha dia ${card.closingDay}` : ' · dia de fechamento não cadastrado'}
                 </div>
+
+                <ComprasDoCartao
+                  titulo="Fatura deste mês"
+                  nota="Sai do bolso agora e está na divisão deste mês. Toque numa compra pra marcar como paga — dá pra adiantar uma só."
+                  compras={comprasDesteMes(state.sharedPurchases).filter((p) => (p.cardId || null) === card.id)}
+                  cats={state.cats}
+                  onTogglePaid={onToggleSharedPurchasePaid}
+                  onEditValor={onEditSharedPurchase}
+                  onDelete={onDeleteSharedPurchase}
+                />
+
+                <ComprasDoCartao
+                  titulo="Próxima fatura"
+                  nota="Você já comprou, mas isso só sai do bolso no mês que vem — então não conta no gasto nem na divisão deste mês. Ocupa limite, porque o limite já foi usado. Quando você fechar o mês, vira a fatura atual."
+                  compras={comprasDaProximaFatura(state.sharedPurchases).filter((p) => (p.cardId || null) === card.id)}
+                  cats={state.cats}
+                  onTogglePaid={onToggleSharedPurchasePaid}
+                  onEditValor={onEditSharedPurchase}
+                  onDelete={onDeleteSharedPurchase}
+                />
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Compras sem cartão identificado (importadas sem escolher cartão, ou
+          de um cartão que foi apagado) não apareciam em bloco nenhum aqui —
+          somadas ao filtro da aba "Este mês", uma compra da próxima fatura
+          sem cartão ficava invisível no app inteiro até o mês fechar. */}
+      {(state.sharedPurchases || []).some((p) => !p.cardId) && (
+        <div style={{ borderRadius: radius.card, padding: 16, background: color.surfaceInset, marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+            <CreditCard size={17} color={color.textWeak} />
+            <span style={{ fontSize: 15, fontWeight: 500 }}>Sem cartão identificado</span>
+          </div>
+          <div style={{ fontSize: 10.5, color: color.textWeak, lineHeight: 1.5 }}>
+            Compras que não estão ligadas a nenhum cartão cadastrado. Elas contam normalmente na divisão, mas não
+            entram no controle de limite de cartão nenhum.
+          </div>
+          <ComprasDoCartao
+            titulo="Fatura deste mês"
+            compras={comprasDesteMes(state.sharedPurchases).filter((p) => !p.cardId)}
+            cats={state.cats}
+            onTogglePaid={onToggleSharedPurchasePaid}
+            onEditValor={onEditSharedPurchase}
+            onDelete={onDeleteSharedPurchase}
+          />
+          <ComprasDoCartao
+            titulo="Próxima fatura"
+            compras={comprasDaProximaFatura(state.sharedPurchases).filter((p) => !p.cardId)}
+            cats={state.cats}
+            onTogglePaid={onToggleSharedPurchasePaid}
+            onEditValor={onEditSharedPurchase}
+            onDelete={onDeleteSharedPurchase}
+          />
         </div>
       )}
 
@@ -951,6 +1145,7 @@ export default function Bills({
   onDeleteBill,
   onTogglePaid,
   onDeleteSharedPurchase,
+  onEditSharedPurchase,
   onEditSharedPurchaseCategory,
   onToggleSharedPurchasePaid,
   onLancarInstallment,
@@ -1007,7 +1202,16 @@ export default function Bills({
       )}
 
       {view === 'cartoes' && (
-        <Cartoes state={state} onAddCard={onAddCard} onEditCard={onEditCard} onDeleteCard={onDeleteCard} names={names} />
+        <Cartoes
+          state={state}
+          onAddCard={onAddCard}
+          onEditCard={onEditCard}
+          onDeleteCard={onDeleteCard}
+          onToggleSharedPurchasePaid={onToggleSharedPurchasePaid}
+          onEditSharedPurchase={onEditSharedPurchase}
+          onDeleteSharedPurchase={onDeleteSharedPurchase}
+          names={names}
+        />
       )}
 
       {view === 'historico' && <Historico historico={state.historico || []} names={names} />}

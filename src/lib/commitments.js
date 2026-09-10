@@ -4,6 +4,8 @@
 // categoria (ex. "Mercado: R$ 1.000") é uma meta pra acompanhar o gasto,
 // não é um valor já gasto ou já comprometido, então não entra na divisão.
 
+import { comprasDesteMes } from './faturas';
+
 // Dado uma compra conjunta, decide em qual "compromisso" da divisão ela
 // entra. Toda compra que veio do cartão (importada por CSV ou lançada na
 // mão) junta numa fatura só, mesmo que seja categorizada como Mercado —
@@ -47,7 +49,9 @@ export function buildCommitments(state) {
   // marcação de acompanhamento — quem quiser saber quanto ainda falta pagar
   // vê isso no Perfil, que desconta o que já foi pago do total de CADA
   // pessoa, sem mexer na divisão em si.
-  const compras = state.sharedPurchases || [];
+  // Fora a próxima fatura: ela já foi comprada, mas só sai do bolso no
+  // mês que vem, então não entra na divisão deste mês.
+  const compras = comprasDesteMes(state.sharedPurchases);
 
   const porCartao = {};
   compras.forEach((p) => {

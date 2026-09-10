@@ -28,11 +28,15 @@ function SectionLabel({ children }) {
   );
 }
 
-function CarrinhoCard({ items, mercado }) {
+function CarrinhoCard({ items, mercado, gastoNoCartao = 0 }) {
   const totalCarrinho = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
   const totalUnidades = items.reduce((s, i) => s + i.qty, 0);
-  const gastoComCarrinho = mercado.spent + totalCarrinho;
-  const pct = Math.min(100, (gastoComCarrinho / mercado.budget) * 100);
+  // `mercado.spent` só tem o que foi pago à vista: a feira no crédito virou
+  // compra na fatura do cartão e é contada por outro caminho. Sem somar
+  // `gastoNoCartao` aqui, a própria tela onde a compra foi feita mostrava
+  // um envelope muito menor do que o Início.
+  const gastoComCarrinho = mercado.spent + gastoNoCartao + totalCarrinho;
+  const pct = mercado.budget > 0 ? Math.min(100, (gastoComCarrinho / mercado.budget) * 100) : 0;
   const passou = gastoComCarrinho > mercado.budget;
 
   return (
@@ -309,6 +313,7 @@ export default function Shop({
   onAddItem,
   onChangeQty,
   onEditItem,
+  gastoNoCartao = 0,
   onChangeMethod,
   onChangeDebitPart,
   onFinalizar,
@@ -323,7 +328,7 @@ export default function Shop({
     <div style={{ padding: '64px 20px 100px' }}>
       <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: '-.02em', marginBottom: 20 }}>Feira</div>
 
-      <CarrinhoCard items={shop.items} mercado={mercado} />
+      <CarrinhoCard items={shop.items} mercado={mercado} gastoNoCartao={gastoNoCartao} />
 
       <SectionLabel>Adicionar item</SectionLabel>
       <AdicionarItem onAdd={onAddItem} />

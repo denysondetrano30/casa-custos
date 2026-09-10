@@ -27,6 +27,7 @@ import { diaDeHoje } from './lib/hoje';
 import { chaveParcelamento } from './lib/futureBills';
 import { aporteMensalTotal } from './lib/goals';
 import { buildSettlement } from './lib/settlement';
+import { comprasDesteMes, faturaDaCompraNoCartao } from './lib/faturas';
 
 const CHAVE_DESBLOQUEADO = 'casa:desbloqueado';
 
@@ -131,6 +132,11 @@ export default function App() {
                 category: cat || null,
                 cardId: pagamento.cardId,
                 paid: false,
+                // Comprou depois do fechamento do cartão? Então essa compra
+                // só sai do bolso na fatura do mês que vem — fica de fora
+                // do gasto e da divisão deste mês (ver src/lib/faturas.js).
+                proximaFatura:
+                  faturaDaCompraNoCartao(prev.cards, pagamento.cardId) === 'proxima',
               },
             ],
           };
@@ -407,10 +413,51 @@ export default function App() {
         method: METODO_LABEL[prev.shop.method],
       };
 
+      // A parte no CRÉDITO vira uma compra conjunta de verdade: cai na
+      // fatura do cartão de quem pagou, ocupa limite e entra na divisão —
+      // e vai pra fatura deste mês ou pra próxima conforme o dia de
+      // fechamento. Antes a Feira no crédito só somava na categoria: não
+      // aparecia em fatura nenhuma, não ocupava limite e não tinha como
+      // marcar como paga, embora a tela chamasse aquilo de "Cartão".
+      // Prefere o cartão de quem pagou. Se essa pessoa não tem cartão
+      // cadastrado e existe só um cartão na casa, usa ele — é o palpite
+      // certo em casa de um cartão só. Se há vários e nenhum é dela, fica
+      // sem cartão (aparece no bloco "Sem cartão identificado" em Contas →
+      // Cartões) em vez de escolher errado no escuro.
+      const cards = prev.cards || [];
+      const cartaoDoPagador =
+        (payer ? cards.find((c) => c.owner === payer) : null) || (cards.length === 1 ? cards[0] : null);
+      const compraNoCredito =
+        credito > 0
+          ? [
+              {
+                id: purchaseId + 2,
+                // Marca de origem: é por ela que `deletePurchase` encontra
+                // esta compra. Antes ele procurava por `id + 2` na conta,
+                // o que podia apagar uma compra alheia de mesmo id — e
+                // rodava até quando nem existia compra no crédito.
+                origemFeira: purchaseId,
+                name: 'Mercado',
+                value: credito,
+                category: 'mercado',
+                cardId: cartaoDoPagador?.id || null,
+                paid: false,
+                proximaFatura:
+                  faturaDaCompraNoCartao(prev.cards, cartaoDoPagador?.id) === 'proxima',
+              },
+            ]
+          : [];
+
+      // `cats.spent` recebe só o que NÃO virou compra conjunta — a compra
+      // conjunta já é contada por categoria pelo outro caminho, e somar
+      // nos dois lugares contaria o mercado em dobro.
+      const somaNaCategoria = total - credito;
+
       return {
         ...prev,
-        cats: prev.cats.map((c) => (c.id === 'mercado' ? { ...c, spent: c.spent + total } : c)),
+        cats: prev.cats.map((c) => (c.id === 'mercado' ? { ...c, spent: c.spent + somaNaCategoria } : c)),
         txs: [...novasTxs, ...prev.txs],
+        sharedPurchases: [...(prev.sharedPurchases || []), ...compraNoCredito],
         purchases: [purchase, ...prev.purchases],
         shop: { items: [], method: prev.shop.method, debitPart: 0 },
       };
@@ -427,10 +474,28 @@ export default function App() {
       const purchase = prev.purchases.find((p) => p.id === id);
       if (!purchase) return prev;
       const idsTxsDaCompra = new Set([id, id + 1]);
+      // Acha pela marca de origem, não por aritmética de id.
+      const compraConjuntaDaFeira = (prev.sharedPurchases || []).find((p) => p.origemFeira === id);
       return {
         ...prev,
-        cats: prev.cats.map((c) => (c.id === 'mercado' ? { ...c, spent: Math.max(0, c.spent - purchase.total) } : c)),
+        // Desconta da categoria exatamente o que ESTA compra somou lá.
+        // Se ela gerou uma compra conjunta (feira no crédito), a categoria
+        // recebeu só a parte à vista. Se não gerou — inclusive as feiras
+        // registradas por uma versão anterior do app, que somavam o total
+        // inteiro — desconta o total, senão o valor ficava preso em
+        // Mercado pra sempre, sem nenhum registro pra apagar.
+        cats: prev.cats.map((c) =>
+          c.id === 'mercado'
+            ? {
+                ...c,
+                spent: Math.max(0, c.spent - (compraConjuntaDaFeira ? purchase.total - (purchase.credit || 0) : purchase.total)),
+              }
+            : c
+        ),
         txs: prev.txs.filter((t) => !idsTxsDaCompra.has(t.id)),
+        sharedPurchases: compraConjuntaDaFeira
+          ? (prev.sharedPurchases || []).filter((p) => p !== compraConjuntaDaFeira)
+          : prev.sharedPurchases,
         purchases: prev.purchases.filter((p) => p.id !== id),
       };
     });
@@ -536,10 +601,15 @@ export default function App() {
   // `owner` = quem paga a fatura desse cartão ('Rui' | 'Ana' | null). É o
   // que impede a divisão de sugerir que uma pessoa pague o cartão da outra
   // (ver src/lib/settlement.js).
-  function addCard(nome, limite, dono) {
+  // `closingDay` = dia em que a fatura fecha. É o que diz se uma compra
+  // cai na fatura deste mês ou na próxima (ver src/lib/faturas.js).
+  function addCard(nome, limite, dono, fechamento) {
     setState((prev) => ({
       ...prev,
-      cards: [...(prev.cards || []), { id: `c${Date.now()}`, name: nome, limit: limite, owner: dono || null }],
+      cards: [
+        ...(prev.cards || []),
+        { id: `c${Date.now()}`, name: nome, limit: limite, owner: dono || null, closingDay: fechamento || null },
+      ],
     }));
   }
 
@@ -678,6 +748,11 @@ export default function App() {
             name:
               it.desc +
               (it.parcelaTotal && it.parcelaAtual ? ` · Parcela ${it.parcelaAtual}/${it.parcelaTotal}` : ''),
+            // Importação entra sempre na fatura ATUAL: o CSV que você baixa
+            // é justamente a fatura que está fechada e vai ser paga. Quem
+            // decide entre atual e próxima é o lançamento à mão, pelo dia
+            // de fechamento do cartão (ver src/lib/faturas.js).
+            proximaFatura: false,
             value: it.value,
             category: it.category || null,
             cardId: it.cardId || null,
@@ -693,6 +768,15 @@ export default function App() {
   // Corrige a categoria de uma compra conjunta depois de importada — útil
   // pra arrumar um "chute" errado da importação (ex. algo que caiu em
   // Mercado sem ser mercado de verdade).
+  // Corrige nome e valor de uma compra conjunta já lançada. Antes só a
+  // categoria era editável — errar o valor obrigava a apagar e relançar.
+  function editSharedPurchase(id, dados) {
+    setState((prev) => ({
+      ...prev,
+      sharedPurchases: (prev.sharedPurchases || []).map((p) => (p.id === id ? { ...p, ...dados } : p)),
+    }));
+  }
+
   function editSharedPurchaseCategory(id, category) {
     setState((prev) => ({
       ...prev,
@@ -851,7 +935,10 @@ export default function App() {
   const extrasTotal = (pessoa) => state.extras[pessoa].reduce((s, e) => s + e.v, 0);
   const rendaCasalTotal =
     state.income.Rui + state.income.Ana + extrasTotal('Rui') + extrasTotal('Ana');
-  const sharedPurchasesTotal = (state.sharedPurchases || []).reduce((s, p) => s + p.value, 0);
+  // A próxima fatura fica fora do gasto do mês: ela ainda não saiu da
+  // conta de ninguém (ver src/lib/faturas.js).
+  const comprasDoMes = comprasDesteMes(state.sharedPurchases);
+  const sharedPurchasesTotal = comprasDoMes.reduce((s, p) => s + p.value, 0);
   const billsTotal = state.bills.reduce((s, b) => s + b.value, 0) + sharedPurchasesTotal;
   const rendaCasal = state.income.Rui + state.income.Ana; // só renda fixa, usada nas faturas futuras
 
@@ -903,6 +990,9 @@ export default function App() {
       <Shop
         shop={state.shop}
         mercado={state.cats.find((c) => c.id === 'mercado')}
+        gastoNoCartao={comprasDoMes
+          .filter((p) => p.category === 'mercado')
+          .reduce((s, p) => s + p.value, 0)}
         onAddItem={shopAddItem}
         onChangeQty={shopChangeQty}
         onEditItem={shopEditItem}
@@ -922,6 +1012,7 @@ export default function App() {
         onTogglePaid={togglePaid}
         onDeleteSharedPurchase={deleteSharedPurchase}
         onEditSharedPurchaseCategory={editSharedPurchaseCategory}
+        onEditSharedPurchase={editSharedPurchase}
         onToggleSharedPurchasePaid={toggleSharedPurchasePaid}
         onLancarInstallment={lancarInstallment}
         onDeleteInstallment={deleteInstallment}

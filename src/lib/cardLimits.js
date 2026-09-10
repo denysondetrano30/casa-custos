@@ -9,6 +9,8 @@ export function buildCardUsage(state, cardId) {
   // Só conta o que ainda NÃO foi pago: quando você adianta o pagamento de
   // uma compra (marcando ela como paga em Contas ou no Perfil), aquele
   // limite volta a ficar livre — que é como o cartão funciona de verdade.
+  // As duas faturas ocupam limite: a próxima também já consumiu o cartão
+  // de verdade, mesmo que só vá ser paga no mês que vem.
   const comprasDoCartao = (state.sharedPurchases || []).filter(
     (p) => (p.cardId || null) === cardId && !p.paid
   );

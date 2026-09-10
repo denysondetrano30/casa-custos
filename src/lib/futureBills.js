@@ -3,6 +3,8 @@
 // aberto + a simulação de compra (se houver). O orçamento de categoria
 // (ex. "Mercado: R$ 1.000") é só uma meta pra acompanhar o gasto do mês
 // atual — não é um gasto que já vai acontecer, então não entra aqui.
+import { comprasDesteMes } from './faturas';
+
 export function buildFutureMonths(state, simulacao) {
   const contasFixas = state.bills || [];
   const totalContasFixas = contasFixas.reduce((s, b) => s + b.value, 0);
@@ -12,7 +14,7 @@ export function buildFutureMonths(state, simulacao) {
   // futuros (só sabemos as parcelas já compromissadas), mas pro mês atual
   // (k=0) não faz sentido estimar por parcela quando já temos o valor
   // real.
-  const totalComprasEsteMes = (state.sharedPurchases || []).reduce((s, p) => s + p.value, 0);
+  const totalComprasEsteMes = comprasDesteMes(state.sharedPurchases).reduce((s, p) => s + p.value, 0);
   const months = [];
 
   for (let k = 0; k < 6; k++) {

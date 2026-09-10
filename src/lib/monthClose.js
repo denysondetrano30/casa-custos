@@ -8,7 +8,8 @@
 // (contas pessoais fixas), goals, splitPct, names, personalCategories.
 
 import { commitmentIdForSharedPurchase } from './commitments';
-import { aplicarAportesDoMes, aporteMensalTotal } from './goals';
+import { aplicarAportesDoMes } from './goals';
+import { comprasDesteMes, promoverProximaFatura } from './faturas';
 
 const MESES_FULL = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -49,12 +50,15 @@ function responsavelDoCompromisso(commitmentId, splitResult) {
 export function buildSnapshot(state, splitResult) {
   const catsSpentRaw = state.cats.reduce((s, c) => s + c.spent, 0);
   const billsAll = state.bills.reduce((s, b) => s + b.value, 0);
-  const sharedAll = (state.sharedPurchases || []).reduce((s, p) => s + p.value, 0);
+  // Só o que saiu do bolso neste mês — a próxima fatura entra no resumo
+  // do mês que vem, quando for paga.
+  const comprasDoMes = comprasDesteMes(state.sharedPurchases);
+  const sharedAll = comprasDoMes.reduce((s, p) => s + p.value, 0);
   const gastoTotalCasal = catsSpentRaw + billsAll + sharedAll;
 
   const cats = state.cats.map((c) => {
     const contasFixasCat = state.bills.filter((b) => b.category === c.id).reduce((s, b) => s + b.value, 0);
-    const comprasCat = (state.sharedPurchases || []).filter((p) => p.category === c.id).reduce((s, p) => s + p.value, 0);
+    const comprasCat = comprasDoMes.filter((p) => p.category === c.id).reduce((s, p) => s + p.value, 0);
     return { id: c.id, name: c.name, budget: c.budget, spent: c.spent + contasFixasCat + comprasCat };
   });
 
@@ -73,7 +77,11 @@ export function buildSnapshot(state, splitResult) {
     ...state.bills
       .filter((b) => !b.paid)
       .map((b) => ({ tipo: 'conta', name: b.name, value: b.value, responsaveis: responsavelDoCompromisso(`bill-${b.id}`, splitResult) })),
-    ...(state.sharedPurchases || [])
+    // Só as compras que faziam parte DESTE mês: uma compra da próxima
+    // fatura não é pendência de agora, e ela já vai ser cobrada no mês que
+    // vem (a promoção abaixo cuida disso). Sem esse filtro, o mesmo valor
+    // ficava gravado como pendência de setembro E como gasto de outubro.
+    ...comprasDesteMes(state.sharedPurchases)
       .filter((p) => !p.paid)
       .map((p) => ({
         tipo: 'compra',
@@ -124,7 +132,11 @@ export function resetForNextMonth(state, snapshot) {
     // fixa (que continua existindo, pois é recorrente) volta a ficar
     // pendente até ser paga de novo.
     bills: state.bills.map((b) => ({ ...b, paid: false })),
-    sharedPurchases: [],
+    // As compras da fatura deste mês foram pagas e saem; as que estavam
+    // na PRÓXIMA fatura viram a fatura atual do mês novo. Antes tudo era
+    // apagado, então uma compra feita depois do fechamento do cartão
+    // desaparecia sem nunca ter sido paga por ninguém.
+    sharedPurchases: promoverProximaFatura(state.sharedPurchases),
     // As compras registradas na Feira são deste mês: no mês novo a lista
     // começa limpa. Antes elas ficavam lá para sempre e, pior, apagar uma
     // delas descontava do Mercado do mês ATUAL um valor gasto no anterior.

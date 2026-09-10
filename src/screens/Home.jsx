@@ -1,6 +1,7 @@
 import { DownloadSimple, PencilSimple, Trash } from '@phosphor-icons/react';
 import { color, radius } from '../lib/tokens';
 import { brl, parseValor } from '../lib/format';
+import { comprasDesteMes } from '../lib/faturas';
 
 function SectionLabel({ children }) {
   return (
@@ -179,7 +180,7 @@ function CategoriesSection({ cats, bills = [], sharedPurchases = [], onEditBudge
           const contasFixasCat = bills
             .filter((b) => b.category === cat.id)
             .reduce((sum, b) => sum + (b.value || 0), 0);
-          const comprasConjuntasCat = sharedPurchases
+          const comprasConjuntasCat = comprasDesteMes(sharedPurchases)
             .filter((p) => p.category === cat.id)
             .reduce((sum, p) => sum + (p.value || 0), 0);
           const totalCat = cat.spent + contasFixasCat + comprasConjuntasCat;
